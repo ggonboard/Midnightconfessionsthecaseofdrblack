@@ -182,7 +182,7 @@ header {
     color: #ffffff !important; 
 }
 
-/* 3. Accuse Suspects button in Lobby/Crime Scene */
+/* 3. Arrest Killer button in Lobby/Crime Scene */
 
 .btn-crimson[onclick*="showSolveView"] {
     color: var(--gold) !important;
@@ -774,9 +774,9 @@ header {
         </div>
 
         <div style="background:#ffffff; border:2px solid var(--accent); border-radius:8px; padding:20px; margin-top:20px; box-shadow: 2px 2px 10px rgba(0,0,0,0.1); text-align:center;">
-            <strong style="color:var(--accent); font-size:1.1rem; text-transform:uppercase; font-family:'Crimson Text', serif; letter-spacing:1px;">🚨 Final Accusation</strong>
+            <strong style="color:var(--accent); font-size:1.1rem; text-transform:uppercase; font-family:'Crimson Text', serif; letter-spacing:1px;">🚨 Arrest Warrant</strong>
             <p style="font-size:0.85rem; color:#555; margin:10px 0 15px 0;">Ready to close the case? Lock in your targets and submit your report to the Commissioner.</p>
-            <button class="btn btn-crimson" style="margin:0; width:100%; padding:15px;" onclick="document.getElementById('hq-modal').style.display='none'; showSolveView();">🚨 Accuse Suspects</button>
+            <button class="btn btn-crimson" style="margin:0; width:100%; padding:15px;" onclick="document.getElementById('hq-modal').style.display='none'; showSolveView();">🚨 Arrest Killer</button>
         </div>
 
         <button class="btn btn-secondary" style="margin-top: 25px; border-color:var(--gold-dim); color:var(--ink); width:100%; padding:15px;" onclick="document.getElementById('hq-modal').style.display='none'">⬅️ Back to Investigation</button>
@@ -792,7 +792,7 @@ header {
 
 
      <div id="view-solve" class="view">
-        <h2 style="text-align:center; color: var(--gold); text-transform: uppercase;">Final Accusation</h2>
+        <h2 style="text-align:center; color: var(--gold); text-transform: uppercase;">Arrest Warrant</h2>
         <p style="text-align:center; font-style:italic; font-size:0.8rem; color:#ff6b6b; margin-top:-10px;">(You have <span id="accuse-chances-display">2</span> chance(s) remaining)</p>
         
         <label>Who is the Killer?</label>
@@ -804,7 +804,7 @@ header {
         <label>What is the Murder Weapon?</label>
         <select id="solve-weapon-name" class="weapon-dropdown" style="padding: 15px; font-size: 1.1rem; border: 2px solid var(--gold-dim); background: #ffffff; color: var(--ink); margin-bottom: 15px; width: 100%; border-radius: 4px;"></select>
         
-              <button class="btn btn-crimson" style="margin-top: 20px;" onclick="attemptSolve()">Lock In Solution</button>
+              <button class="btn btn-crimson" style="margin-top: 20px;" onclick="attemptSolve()">Execute Arrest</button>
         <button class="btn btn-secondary" style="margin-top: 10px; border-color:#555;" onclick="showView('view-main')">Cancel</button>
     </div>
 </div> 
@@ -994,7 +994,8 @@ function toggleRivalModal() {
             if(cluesDisplay) cluesDisplay.innerText = `${aiStats.possibleRooms ? aiStats.possibleRooms.length : '??'} Rooms Left`;
             
             let locEl = document.getElementById('ai-tracker-loc');
-            if(locEl) locEl.innerText = aiStats.loc || "Unknown";
+if(locEl) locEl.innerText = localStorage.getItem('aiLoc_' + GAME_DATA.activeSeed) || "Unknown";
+
             
             let clearEl = document.getElementById('ai-tracker-cleared');
             if(clearEl) clearEl.innerText = aiStats.visited ? aiStats.visited.length : 0;
@@ -1079,9 +1080,14 @@ function attemptSolve() {
 
     if (!gKName || !gKLoc || !gWName) return showCustomAlert("You must identify the Killer, their hiding spot, and the murder weapon.");
     
+    // 🚨 ARREST LOCATION CONSTRAINT: Must be in the same room!
+    let pLoc = GAME_DATA.playerLocation || 'ENTRANCE HALL';
+    if (pLoc !== gKLoc) {
+        return showCustomAlert(`<span style='color:#ff6b6b; font-weight:bold; text-transform:uppercase;'>OUT OF POSITION</span><br><br>You cannot execute an arrest from the ${pLoc}! You must physically walk your detective pawn to the <strong>${gKLoc}</strong> to confront the killer.`);
+    }
+
     let k = GAME_DATA.solution.entities.find(e=>e.id==='K');
     let w = GAME_DATA.solution.entities.find(e=>e.id==='W1');
-    
     // Check Who, Where, and With What
     if (gKName === k.name && gKLoc === k.loop[k.startIndex] && gWName === w.name) {
         let aiStats = JSON.parse(localStorage.getItem('aiStats_' + GAME_DATA.activeSeed)) || { score: 0 };
@@ -1101,7 +1107,7 @@ function attemptSolve() {
             // 🚨 NEW: If they get it wrong at 3:00 PM, it is an instant GAME OVER!
             let isOvertime = (GAME_DATA.round > 8 || GAME_DATA.timeSpent >= 480);
             if (isOvertime) {
-                return showCustomAlert(`<span style='color:#ff6b6b; font-weight:bold; font-size:1.4rem; text-transform:uppercase;'>THE KILLER ESCAPED!</span><br><br>Your final accusation was incorrect. The real killer slipped through the front gates while you were interrogating an innocent person.<br><br>The Commissioner just demanded your badge and gun. You are officially off the force.<br><br><strong style="color:var(--gold);">The True Solution was:</strong><br>Killer: <strong style="color:#fff;">${k.name}</strong><br>Hiding Spot: <strong style="color:#fff;">${k.loop[k.startIndex]}</strong><br>Weapon: <strong style="color:#fff;">${w.name}</strong>`, hardReset);
+                return showCustomAlert(`<span style='color:#ff6b6b; font-weight:bold; font-size:1.4rem; text-transform:uppercase;'>THE KILLER ESCAPED!</span><br><br>Your Arrest Warrant was incorrect. The real killer slipped through the front gates while you were interrogating an innocent person.<br><br>The Commissioner just demanded your badge and gun. You are officially off the force.<br><br><strong style="color:var(--gold);">The True Solution was:</strong><br>Killer: <strong style="color:#fff;">${k.name}</strong><br>Hiding Spot: <strong style="color:#fff;">${k.loop[k.startIndex]}</strong><br>Weapon: <strong style="color:#fff;">${w.name}</strong>`, hardReset);
             }
 
             GAME_DATA.accuseChances--; 
@@ -1109,7 +1115,7 @@ function attemptSolve() {
                 showCustomAlert(`<span style='color:#ff6b6b; font-weight:bold; text-transform:uppercase;'>DISASTROUS ACCUSATION</span><br><br>The precinct is furious! You've been heavily penalized, but the case remains open. Keep investigating.<br><br><strong>Penalty: -100 Points</strong>`);
                 GAME_DATA.accuseChances = 1; 
             } else {
-                showCustomAlert(`WRONG ACCUSATION.<br><br>The evidence doesn't line up. You have <strong>${GAME_DATA.accuseChances}</strong> attempt(s) remaining before the Chief pulls you off the case.`);
+                showCustomAlert(`ARREST WARRANT DENIED.<br><br>The evidence doesn't line up. The judge threw out your warrant! You have <strong>${GAME_DATA.accuseChances}</strong> attempt(s) remaining before the Chief pulls you off the case.`);
             }
         }
     }
@@ -1363,15 +1369,11 @@ function startRound() {
             return showCustomAlert(`<span style="color:#ff6b6b; font-weight:bold; font-size:1.5rem; text-transform:uppercase;">You're Off The Case!</span><br><br>The Mayor himself just called the precinct. Your reckless footwork and unsanctioned overtime have made a mockery of this department.<br><br><em style="color:#bbb;">"Hand in your tin star and your piece, detective. The Pinkertons will take it from here."</em>`, hardReset);
         }
 
-                if (overflow > 0 || ranksLost > 0) {
-            let reason = [];
-            if (overflow > 0) reason.push("Action Point Overrun");
-            if (ranksLost > 0) reason.push("Demotion");
-            penaltyText = `<br><br><span style="color:#ff6b6b; font-weight:bold;">⚠️ DEPARTMENT PENALTY (${reason.join(" & ")}):</span> You lost ${overflow + (ranksLost * 3)} Reputation this shift!`;
+        if (overflow > 0 || ranksLost > 0) {
+            penaltyText = `<br><br><span style="color:#ff6b6b; font-weight:bold;">⚠️ DEPARTMENT PENALTY:</span> You lost ${overflow + (ranksLost * 3)} Reputation this shift!`;
             if (ranksLost > 0) penaltyText += ` You were officially demoted ${ranksLost} Rank(s)!`;
             penaltyText += `<br><br><span style='font-size:0.85rem; color:#bbb;'>* Adjust your Reputation and Rank on your physical player board!</span>`;
         }
-
     }
 
     // 🚨 FINAL WARNING TRIGGER CHECK
@@ -1523,13 +1525,17 @@ function startRound() {
         };
 
 
-                if (needsFinalWarning) {
-            showCustomAlert(`<span style="color:#ff6b6b; font-weight:bold; font-size:1.3rem; text-transform:uppercase;">🚨 Final Warning: Reputation Critical</span><br><br><em style="color:#bbb; font-size:1.05rem; line-height:1.5;">"Listen here, gumshoe. Your reputation in the department is at rock bottom. The Commissioner is breathing down my neck and the press is having a field day. One more slip-up and I'll have your badge on my desk. Tread lightly."</em>`, triggerStartAlert);
+        if (needsFinalWarning) {
+            showCustomAlert(`<span style="color:#ff6b6b; font-weight:bold; font-size:1.3rem; text-transform:uppercase;">🚨 Final Warning</span><br><br><em style="color:#bbb; font-size:1.05rem; line-height:1.5;">"Listen here, gumshoe. The Commissioner is breathing down my neck and the press is having a field day. One more slip-up and I'll have your badge on my desk. Tread lightly."</em>`, triggerDepartmentDrop);
         } else {
-
             triggerDepartmentDrop();
         }
 }
+
+
+
+
+
 
 function promptEndRound() {
     document.getElementById('confirm-round-num').innerText = GAME_DATA.round;
@@ -2078,7 +2084,10 @@ function initializeMystery(seed) {
 
     const kStart = finalEnts.find(e => e.id === 'K').loop[finalEnts.find(e => e.id === 'K').startIndex];
     let kPath = [kStart]; 
-    GAME_DATA.solution = { entities: finalEnts, loopA, loopB, killerPath: kPath };
+    let validCrimeScenes = allRooms.filter(r => r !== 'HALLWAY' && r !== 'STAIRCASE');
+    let cScene = validCrimeScenes[Math.floor(setupRng() * validCrimeScenes.length)];
+    GAME_DATA.solution = { entities: finalEnts, loopA, loopB, killerPath: kPath, crimeScene: cScene };
+
 
     let startingIntelCount = parseInt(localStorage.getItem('activeIntel_' + seed)) || 6;
 
@@ -2303,9 +2312,15 @@ if (item === "Torchlight" && room === "CELLAR") valid = false;                if
     // 🚨 NEW: Fetch Alfred's starting location from memory!
     let aiStartLoc = localStorage.getItem('aiLoc_' + seed) || "Unknown";
 
+        let cSceneName = GAME_DATA.solution.crimeScene;
     let setupHtml = `
     <div style='text-align:center; border-bottom: 2px solid var(--gold); padding-bottom:12px; margin-bottom:20px;'>
         <span style="color:var(--gold); font-size:1.4rem; font-weight:bold; text-transform:uppercase;">Detective's Case File</span>
+    </div>
+
+    <div style="margin-bottom:15px; text-align:left; background:rgba(188, 71, 73, 0.1); padding:10px; border:1px solid var(--accent); border-radius:6px;">
+        <strong style="color:var(--accent); text-transform:uppercase; font-size:0.85rem;">🩸 Official Crime Scene:</strong><br>
+        <span style="color:var(--ink); font-size:1rem;">Dr. Black was murdered in the <strong>${cSceneName}</strong>. Forensics cleared the body, but footprints lead away from the scene.</span>
     </div>
     
  <div style="text-align:left; font-size:1.1rem; background:#ffffff; padding:15px; border-radius:8px; border:1px solid var(--gold-dim); margin-bottom: 15px;">
@@ -2561,7 +2576,7 @@ function checkLocationAbilities() {
         } else {
             tossBtn.style.opacity = '1';
             tossBtn.style.pointerEvents = 'auto';
-                       tossBtn.className = "btn btn-secondary";
+                        tossBtn.className = "btn btn-secondary";
             tossBtn.innerHTML = "🔍 Toss the Room <br><span style='font-size:0.75rem; font-weight:normal;'>(4 AP ⚡)</span>";
         }
     }
@@ -2821,7 +2836,7 @@ function openScannerTab() {
                         localStorage.setItem('foundItems_' + GAME_DATA.activeSeed, JSON.stringify(foundItems));
                         
                         saveLog(`Discovered hidden item in ${scannedRoom.id}: ${itemFound} (-1 AP)`);
-                        return showCustomAlert(`<span style='color:var(--gold); font-weight:bold;'>ITEM DISCOVERED</span><br><br>You found a <strong>${itemFound}</strong>!<br><br><span style='font-size:0.85rem; color:#bbb;'>* Take the Item Token from the board and swap it for the ${itemFound} card. You may need to scan it later!</span>`, checkPhaseTransition);
+                        return showCustomAlert(`<span style='color:var(--gold); font-weight:bold;'>ITEM DISCOVERED</span><br><br>You found a <strong>${itemFound}</strong>!<br><br><span style='font-size:0.85rem; color:#bbb;'>* Take the unknown token from the board and swap it for the ${itemFound} card. You may need to scan it later!</span>`, checkPhaseTransition);
                     } else {
                         // Instant events (like Syringe, Ledger, or Ambush)
                         saveLog(`Triggered hidden event in ${scannedRoom.id} (-1 AP)`);
@@ -2921,6 +2936,61 @@ function openScannerTab() {
                         }
                     }
                 }
+            }
+            // 0. TRACKING DUST
+            if (rawStr.includes("dust") || rawStr.includes("tracking")) {
+                let pLoc = GAME_DATA.playerLocation || 'ENTRANCE HALL';
+                let cScene = GAME_DATA.solution.crimeScene;
+
+                if (pLoc !== cScene) {
+                    return showCustomAlert("<span style='color:#ff6b6b; font-weight:bold;'>INVALID LOCATION</span><br><br>Tracking Dust can only be used at the <strong>original Crime Scene</strong> to trace the initial escape routes.");
+                }
+
+                // Pathfinding Helper
+                function getDirsTo(start, target) {
+                    if (start === target) return [];
+                    let queue = [{room: start, path: []}];
+                    let visited = new Set([start]);
+                    while(queue.length > 0) {
+                        let curr = queue.shift();
+                        if (curr.room === target) return curr.path;
+                        let connObj = GAME_DATA.roomConnections[curr.room] || {};
+                        for (let dir of ["NORTH", "SOUTH", "EAST", "WEST", "UP", "DOWN"]) {
+                            let n = connObj[dir];
+                            if (n && typeof n === 'string' && n.toLowerCase() !== 'none' && !visited.has(n)) {
+                                visited.add(n);
+                                queue.push({room: n, path: [...curr.path, dir]});
+                            }
+                        }
+                    }
+                    return [];
+                }
+
+                let kLoc = GAME_DATA.solution.entities.find(e => e.id === 'K').loop[0];
+                let aLoc = GAME_DATA.solution.entities.find(e => e.id === 'A').loop[0];
+
+                let kDirs = getDirsTo(pLoc, kLoc);
+                let aDirs = getDirsTo(pLoc, aLoc);
+
+                let kText = kDirs.length > 0 ? `one leading to the <strong>${kDirs[0]}</strong>` : `one staying right here`;
+                if (kDirs.length > 1) kText += ` and it goes <strong>${kDirs[1]}</strong>`;
+
+                let aText = aDirs.length > 0 ? `the other going <strong>${aDirs[0]}</strong>` : `the other staying right here`;
+                if (aDirs.length > 1) aText += ` and then <strong>${aDirs[1]}</strong>`;
+
+                let clue = `Player has sprinkled the shining tracking dust on the floor. There are footprints that are starting to appear...<br><br>There are footprints ${kText} and ${aText}.`;
+
+                saveLog(`Used Tracking Dust at Crime Scene: Footprints leading ${kDirs[0]||'Here'} and ${aDirs[0]||'Here'}.`);
+
+                // Remove from inventory
+                let foundItems = JSON.parse(localStorage.getItem('foundItems_' + GAME_DATA.activeSeed) || "[]");
+                let idx = foundItems.findIndex(i => i.includes("dust") || i.includes("tracking"));
+                if (idx > -1) {
+                    foundItems.splice(idx, 1);
+                    localStorage.setItem('foundItems_' + GAME_DATA.activeSeed, JSON.stringify(foundItems));
+                }
+
+                return showCustomAlert(`<span style='color:var(--gold); font-weight:bold; font-size:1.2rem; text-transform:uppercase;'>Tracking Dust Used</span><br><br>${clue}`, checkPhaseTransition);
             }
 
             // 1. LADDER
@@ -3121,11 +3191,9 @@ function executeSearchCurrentRoom() {
             let pRep = parseInt(localStorage.getItem('playerRep_' + GAME_DATA.activeSeed)) || 0;
             localStorage.setItem('playerRep_' + GAME_DATA.activeSeed, pRep - 2);
             
-            reportText = `<span style="color:#ff6b6b; font-size:1.1rem; font-weight:bold; text-transform:uppercase;">⚠️ Department Penalty: Destruction of Property</span><br>You have forcefully tossed ${totalTosses} rooms! The Chief has received too many noise and damage complaints. You lose <strong style="color:#ff6b6b;">2 Reputation</strong>!<br><span style="font-size:0.85rem; color:#bbb;">* Move your Reputation Tracker -2 on your physical Officer Stats sheet.</span><br><br>`;
+            reportText = `<span style="color:#ff6b6b; font-size:1.1rem; font-weight:bold; text-transform:uppercase;">⚠️ Department Warning</span><br>You have tossed ${totalTosses} rooms! The Chief has received too many noise complaints about your destruction of property. You lose <strong style="color:#ff6b6b;">2 Reputation</strong>!<br><br>`;
             updateStatsUI();
         } else {
-
-
             let tossesLeft = 3 - totalTosses;
             reportText = `<span style="color:#4ade80; font-size:0.85rem;">(You can safely toss ${tossesLeft} more room(s) this case).</span><br><br>`;
         }
@@ -3645,7 +3713,6 @@ function bribeWorkerForItem() {
 function executeInterrogate() {
     if (GAME_DATA.activePhase !== 'ACTION') return showCustomAlert("You must select the ACTION phase first.");
     
-    // SAFETY NET: If the browser forgets your location, default to Entrance Hall
     let r = GAME_DATA.playerLocation || 'ENTRANCE HALL';
     let isTossed = localStorage.getItem('tossedRoom_' + GAME_DATA.activeSeed + '_' + r);
     
@@ -3653,51 +3720,114 @@ function executeInterrogate() {
 
     let occ = GAME_DATA.solution.entities.find(ent => ent.loop[ent.startIndex] === r);
     
-    // NEW: Only block weapons or empty rooms. All suspects (including K) can be talked to!
     if (!occ || occ.id.startsWith('W') || occ.name === 'Nobody') {
         return showCustomAlert("There is no one in this room to interrogate.");
     }
 
-    promptActionConfirm(`Interrogating costs <strong style="color:var(--gold);">3 AP ⚡</strong>.<br><br>Please move your physical pawn 3 spaces forward on the Action Track.`, () => {
+    promptActionConfirm(`Interrogating costs <strong style="color:var(--gold);">3 AP ⚡</strong>.<br><br><span style="font-size:0.9rem; color:#bbb;">* Move your AP Tracker +3 on your physical Officer Stats sheet.</span>`, () => {
         if (!spendAP(3)) return; 
-         
 
         const dialRng = getRNG(GAME_DATA.activeSeed + "_interrogate_" + r);
-        let trueKiller = GAME_DATA.solution.entities.find(e => e.id === 'K').name;
-        let traitToReveal = "";
-
-                // Retrieve previously revealed traits so we don't repeat them
+        let kEnt = GAME_DATA.solution.entities.find(e => e.id === 'K');
+        let aEnt = GAME_DATA.solution.entities.find(e => e.id === 'A');
+        let trueKiller = kEnt.name;
+        let statement = "";
         let revealedTraits = JSON.parse(localStorage.getItem('revealedTraits_' + GAME_DATA.activeSeed) || "[]");
+        let cScene = GAME_DATA.solution.crimeScene || GAME_DATA.locations[0].id;
 
-        if (occ.id === 'I') {
-            // Truthful (Innocent)
-            let kData = GAME_DATA.suspects.find(s => s.name === trueKiller);
-            let unrevealed = kData.traits.filter(t => !revealedTraits.includes(t));
-            if (unrevealed.length === 0) unrevealed = kData.traits; // Fallback if all are revealed
-            traitToReveal = unrevealed[Math.floor(dialRng() * unrevealed.length)];
+        // 1. CRIME SCENE LOGIC: Directional Statements
+        if (r === cScene) {
+            function getDirsTo(start, target) {
+                if (start === target) return [];
+                let queue = [{room: start, path: []}];
+                let visited = new Set([start]);
+                while(queue.length > 0) {
+                    let curr = queue.shift();
+                    if (curr.room === target) return curr.path;
+                    let connObj = GAME_DATA.roomConnections[curr.room] || {};
+                    for (let dir of ["NORTH", "SOUTH", "EAST", "WEST", "UP", "DOWN"]) {
+                        let n = connObj[dir];
+                        if (n && String(n).toLowerCase() !== 'none' && !visited.has(n)) {
+                            visited.add(n);
+                            queue.push({room: n, path: [...curr.path, dir]});
+                        }
+                    }
+                }
+                return [];
+            }
+
+            let kLoc = kEnt.loop[kEnt.startIndex];
+            let aLoc = aEnt.loop[aEnt.startIndex];
+            let validDirs = ["NORTH", "SOUTH", "EAST", "WEST", "UP", "DOWN"];
+            
+            if (occ.id === 'I') {
+                // Truthful Direction
+                let kDirs = getDirsTo(r, kLoc);
+                let aDirs = getDirsTo(r, aLoc);
+                let validPaths = [];
+                if (kDirs.length > 0) validPaths.push(kDirs[0]);
+                if (aDirs.length > 0) validPaths.push(aDirs[0]);
+                
+                let trueDir = validPaths.length > 0 ? validPaths[Math.floor(dialRng() * validPaths.length)] : null;
+                
+                if (trueDir) {
+                    statement = `I heard a terrible commotion! I was hiding, but I swear I heard heavy footsteps running towards the <strong>${trueDir}</strong>!`;
+                } else {
+                    statement = `I heard a struggle, but I kept my eyes shut! They didn't seem to leave this room...`;
+                }
+            } else {
+                // K or A giving Fake Direction
+                let kDirs = getDirsTo(r, kLoc);
+                let aDirs = getDirsTo(r, aLoc);
+                let trueKDir = kDirs.length > 0 ? kDirs[0] : null;
+                let trueADir = aDirs.length > 0 ? aDirs[0] : null;
+                
+                let wrongDirs = validDirs.filter(d => d !== trueKDir && d !== trueADir);
+                let fakeDir = wrongDirs.length > 0 ? wrongDirs[Math.floor(dialRng() * wrongDirs.length)] : "UP";
+                
+                statement = `It was awful! It all happened so fast, but I definitely saw someone fleeing towards the <strong>${fakeDir}</strong>!`;
+            }
+
         } else {
-            // Red Herring (Killer or Accomplice point to a fake suspect!)
-            let innocentSuspects = GAME_DATA.suspects.filter(s => s.name !== trueKiller);
-            let fakeSuspect = innocentSuspects[Math.floor(dialRng() * innocentSuspects.length)];
-            let unrevealed = fakeSuspect.traits.filter(t => !revealedTraits.includes(t));
-            if (unrevealed.length === 0) unrevealed = fakeSuspect.traits;
-            traitToReveal = unrevealed[Math.floor(dialRng() * unrevealed.length)];
-        }
-
-        // Save the trait so it's not repeated next time!
-        revealedTraits.push(traitToReveal);
-        localStorage.setItem('revealedTraits_' + GAME_DATA.activeSeed, JSON.stringify(revealedTraits));
-
+            // 2. NON-CRIME SCENE LOGIC: Trait Statements & Frame Jobs
+            let traitToReveal = "";
+            if (occ.id === 'I') {
+                // Innocent tells truth about the Killer
+                let kData = GAME_DATA.suspects.find(s => s.name === trueKiller);
+                let unrevealed = kData.traits.filter(t => !revealedTraits.includes(t));
+                if (unrevealed.length === 0) unrevealed = kData.traits;
+                traitToReveal = unrevealed[Math.floor(dialRng() * unrevealed.length)];
+                
+                let revealText = formatSuspectTrait(traitToReveal, "interrogate");
+                statement = `I have been in the ${r} the whole day, Detective. But earlier, I noticed a person ${revealText} acting very suspicious.`;
+            } else {
+                // Accomplice/Killer actively frame a random Innocent!
+                let innocentSuspects = GAME_DATA.solution.entities.filter(e => e.id === 'I' && e.name !== 'Nobody');
+                let frameTarget = innocentSuspects[Math.floor(dialRng() * innocentSuspects.length)];
+                let frameData = GAME_DATA.suspects.find(s => s.name === frameTarget.name);
+                
+                let unrevealed = frameData.traits.filter(t => !revealedTraits.includes(t));
+                if (unrevealed.length === 0) unrevealed = frameData.traits;
+                traitToReveal = unrevealed[Math.floor(dialRng() * unrevealed.length)];
 
                 let revealText = formatSuspectTrait(traitToReveal, "interrogate");
-        let statement = `I have been in the ${r} the whole day, Detective. But I found a person ${revealText} acting suspicious.`;
+                if (occ.id === 'A') {
+                    statement = `I don't want to point fingers, but you should look into that person ${revealText}. They've been acting incredibly strange!`;
+                } else {
+                    statement = `I was just trying to enjoy the party. Though I did see someone ${revealText} hurrying away with blood on them.`;
+                }
+            }
+
+            revealedTraits.push(traitToReveal);
+            localStorage.setItem('revealedTraits_' + GAME_DATA.activeSeed, JSON.stringify(revealedTraits));
+        }
 
         localStorage.setItem('interrogated_' + GAME_DATA.activeSeed + '_' + r, 'true');
         saveLog(`<b>Interrogated ${occ.name} in ${r}:</b><br><span style="font-size:0.9rem;">"${statement}"</span>`);
         
         if (typeof checkLocationAbilities === 'function') checkLocationAbilities();
 
-        showCustomAlert(`<span style='color:var(--accent); font-weight:bold; text-transform:uppercase;'>Witness Statement</span><br><br>"${statement}"<br><br><span style='font-size:0.85rem; color:#bbb;'>* Note this suspect's trait in your physical Officer Log.</span>`, checkPhaseTransition);
+        showCustomAlert(`<span style='color:var(--accent); font-weight:bold; text-transform:uppercase;'>Witness Statement</span><br><br>"${statement}"<br><br><span style='font-size:0.85rem; color:#bbb;'>* Note this clue in your physical Officer Log.</span>`, checkPhaseTransition);
     });
 }
 
