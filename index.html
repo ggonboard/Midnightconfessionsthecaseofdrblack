@@ -7,7 +7,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-    <script src="https://cdnjs.caloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,700;1,400;1,700&family=Montserrat:wght@400;700;900&family=Special+Elite&display=swap" rel="stylesheet">
     
@@ -220,12 +220,12 @@ header {
             </select>
 
             
-            <div id="difficulty-section">
-                <label>Case Difficulty (A.I. Speed & Permits):</label>
+                        <div id="difficulty-section">
+                <label>Detective Alfred's Intelligence:</label>
                 <select id="new-game-difficulty" style="padding: 12px; margin-bottom: 15px; font-size: 0.95rem; width:100%; border: 2px solid var(--gold-dim); background: var(--bg-deep); color: white; border-radius: 4px;">
-                    <option value="rookie">Rookie - 6 Permits</option>
-                    <option value="normal" selected>Private Eye - 4 Permits</option>
-                    <option value="hard">Hardboiled - 2 Permits</option>
+                    <option value="rookie">Rookie (Slow & Steady)</option>
+                    <option value="normal" selected>Private Eye (Smart Tracker)</option>
+                    <option value="hard">Hardboiled (Relentless Genius)</option>
                 </select>
             </div>
 
@@ -261,13 +261,14 @@ header {
             </select>
 
 
-                        <div id="join-difficulty-section" style="display:none;">
-                <label>Your Difficulty (A.I. Speed & Permits):</label>
+                                   <div id="join-difficulty-section" style="display:none;">
+                <label>Detective Alfred's Intelligence:</label>
                 <select id="join-game-difficulty" style="padding: 12px; margin-bottom: 15px; font-size: 0.95rem; width:100%; border: 2px solid var(--gold-dim); background: var(--bg-deep); color: white; border-radius: 4px;">
-                    <option value="rookie">Rookie - 6 Permits</option>
-                    <option value="normal" selected>Private Eye - 4 Permits</option>
-                    <option value="hard">Hardboiled - 2 Permits</option>
+                    <option value="rookie">Rookie (Slow & Steady)</option>
+                    <option value="normal" selected>Private Eye (Smart Tracker)</option>
+                    <option value="hard">Hardboiled (Relentless Genius)</option>
                 </select>
+
 
 
                              <label>Starting Crime Scene Intel:</label>
@@ -733,10 +734,12 @@ header {
                 <span id="current-location-display" style="font-family: 'Crimson Text'; font-size: 2rem; font-weight: bold; color: var(--ink);">ENTRANCE HALL</span>
             </div>
 
-<button id="btn-toss" class="btn btn-gold" style="margin:0; padding: 15px; font-size: 1rem;" onclick="executeSearchCurrentRoom()">🔍 Toss the Room <br><span style="font-size:0.75rem; font-weight:normal;">(4 AP ⚡)</span></button>
+<button class="btn btn-gold" style="margin:0; padding: 15px; font-size: 1rem;" onclick="openScanRegionModal()">📡 Canvass Area <br><span style="font-size:0.75rem; font-weight:normal;">(1-3 AP ⚡)</span></button>
+
+<button id="btn-toss" class="btn btn-secondary" style="margin:0; padding: 15px; font-size: 1rem;" onclick="executeSearchCurrentRoom()">🔍 Toss the Room <br><span style="font-size:0.75rem; font-weight:normal;">(4 AP ⚡)</span></button>
+
 <button id="btn-interrogate" class="btn btn-gold" style="display:none; background: rgba(188, 71, 73, 0.15); border: 1px dashed var(--accent); color: var(--accent); margin:0; padding: 15px; font-size: 1rem;" onclick="executeInterrogate()">🗣️ Interrogate Suspect <br><span style="font-size:0.75rem; font-weight:normal;">(3 AP ⚡)</span></button>
 <button id="btn-worker" class="btn btn-gold" style="display:none; background: rgba(59, 130, 246, 0.15); border: 1px dashed #3b82f6; color: #3b82f6; margin:0; padding: 15px; font-size: 1rem;" onclick="openWorkerModal()">🛎️ Bribe Mansion Staff <br><span style="font-size:0.75rem; font-weight:normal;">(Costs Cash)</span></button>
-<button class="btn btn-gold" style="background: rgba(212,175,55,0.15); border: 1px dashed var(--gold); color: var(--gold); margin:0; padding: 15px; font-size: 1rem;" onclick="openScanRegionModal()">📡 Canvass Area <br><span style="font-size:0.75rem; font-weight:normal;">(1-3 AP ⚡)</span></button>
 
 
             <div id="owned-gear-action-container" style="display:none; flex-direction:column; gap:12px; margin-top:12px;">
@@ -1130,11 +1133,25 @@ function openRulesModal() {
     
     for (let room of sortedRooms) {
         let connObj = GAME_DATA.roomConnections[room] || {};
-        let neighbors = Object.keys(connObj).filter(k => k !== 'floor').map(k => connObj[k]).join(", ");
+        
+        // 🚨 Double-filter to ensure absolute cleanliness in the UI
+        let neighbors = Object.keys(connObj)
+            .filter(k => ["NORTH", "SOUTH", "EAST", "WEST", "UP", "DOWN"].includes(k.toUpperCase()))
+            .map(k => connObj[k])
+            .filter(n => {
+                if (!n) return false;
+                let clean = String(n).replace(/[^a-zA-Z]/g, '').toLowerCase();
+                return clean !== '' && clean !== 'none' && clean !== 'na';
+            });
+            
+        // Forces the Universal Staircase rule to show up in the laws!
+        if (!neighbors.includes("STAIRCASE") && room !== "STAIRCASE") {
+            neighbors.push("STAIRCASE");
+        }
         
         html += `<li style="margin-bottom:10px; padding-bottom:8px; border-bottom:1px dashed #ccc;">
                     <strong style="color:var(--gold); display:block; text-transform:uppercase;">${room}</strong>
-                    <span style="font-size:0.85rem; color:#555;">➔ Connects to: ${neighbors || "None"}</span>
+                    <span style="font-size:0.85rem; color:#555;">➔ Connects to: ${neighbors.join(", ") || "None"}</span>
                  </li>`;
     }
     html += "</ul>";
@@ -1142,6 +1159,7 @@ function openRulesModal() {
     if (mapListEl) mapListEl.innerHTML = html;
     document.getElementById('rules-modal').style.display = 'flex';
 }
+
 
 
 function updateStatsUI() {
@@ -1162,19 +1180,20 @@ function updateStatsUI() {
     let wTxt = document.getElementById('warrant-lock-text');
     let pendingWarrants = JSON.parse(localStorage.getItem('pendingReports_' + GAME_DATA.activeSeed) || "[]");
     
-    if (wBtn && wTxt) {
-        if (pendingWarrants.length > 0) {
+        if (wBtn && wTxt) {
+        if (pendingWarrants.length >= 2) {
             wBtn.style.opacity = '0.4';
             wBtn.style.pointerEvents = 'none';
             wBtn.disabled = true;
-            wTxt.innerHTML = "(Awaiting Judge's Review ⏳)";
+            wTxt.innerHTML = "(Max Warrants Filed ⏳)";
             wTxt.style.color = "#ff6b6b"; 
         } else if (cRound > 1 && cRound % 2 !== 0) {
             // Unlocks perfectly right after Round 2 ends (Rounds 3, 5, 7)
             wBtn.style.opacity = '1';
             wBtn.style.pointerEvents = 'auto';
             wBtn.disabled = false;
-            wTxt.innerHTML = "(Courier Available Now)";
+            let left = 2 - pendingWarrants.length;
+            wTxt.innerHTML = `(Courier Available - ${left} Left)`;
             wTxt.style.color = "#4ade80"; 
         } else {
             // Locked during the 2-Round gathering phase (Rounds 1, 2, 4, 6)
@@ -1344,11 +1363,15 @@ function startRound() {
             return showCustomAlert(`<span style="color:#ff6b6b; font-weight:bold; font-size:1.5rem; text-transform:uppercase;">You're Off The Case!</span><br><br>The Mayor himself just called the precinct. Your reckless footwork and unsanctioned overtime have made a mockery of this department.<br><br><em style="color:#bbb;">"Hand in your tin star and your piece, detective. The Pinkertons will take it from here."</em>`, hardReset);
         }
 
-        if (overflow > 0 || ranksLost > 0) {
-            penaltyText = `<br><br><span style="color:#ff6b6b; font-weight:bold;">⚠️ DEPARTMENT PENALTY:</span> You lost ${overflow + (ranksLost * 3)} Reputation this shift!`;
+                if (overflow > 0 || ranksLost > 0) {
+            let reason = [];
+            if (overflow > 0) reason.push("Action Point Overrun");
+            if (ranksLost > 0) reason.push("Demotion");
+            penaltyText = `<br><br><span style="color:#ff6b6b; font-weight:bold;">⚠️ DEPARTMENT PENALTY (${reason.join(" & ")}):</span> You lost ${overflow + (ranksLost * 3)} Reputation this shift!`;
             if (ranksLost > 0) penaltyText += ` You were officially demoted ${ranksLost} Rank(s)!`;
             penaltyText += `<br><br><span style='font-size:0.85rem; color:#bbb;'>* Adjust your Reputation and Rank on your physical player board!</span>`;
         }
+
     }
 
     // 🚨 FINAL WARNING TRIGGER CHECK
@@ -1500,17 +1523,13 @@ function startRound() {
         };
 
 
-        if (needsFinalWarning) {
-            showCustomAlert(`<span style="color:#ff6b6b; font-weight:bold; font-size:1.3rem; text-transform:uppercase;">🚨 Final Warning</span><br><br><em style="color:#bbb; font-size:1.05rem; line-height:1.5;">"Listen here, gumshoe. The Commissioner is breathing down my neck and the press is having a field day. One more slip-up and I'll have your badge on my desk. Tread lightly."</em>`, triggerDepartmentDrop);
+                if (needsFinalWarning) {
+            showCustomAlert(`<span style="color:#ff6b6b; font-weight:bold; font-size:1.3rem; text-transform:uppercase;">🚨 Final Warning: Reputation Critical</span><br><br><em style="color:#bbb; font-size:1.05rem; line-height:1.5;">"Listen here, gumshoe. Your reputation in the department is at rock bottom. The Commissioner is breathing down my neck and the press is having a field day. One more slip-up and I'll have your badge on my desk. Tread lightly."</em>`, triggerStartAlert);
         } else {
+
             triggerDepartmentDrop();
         }
 }
-
-
-
-
-
 
 function promptEndRound() {
     document.getElementById('confirm-round-num').innerText = GAME_DATA.round;
@@ -1523,6 +1542,7 @@ function confirmEndRound() {
 }
 
 function endPlayerTurn() {
+    let diff = localStorage.getItem('activeDifficulty_' + GAME_DATA.activeSeed) || 'normal';
     let aiStats = JSON.parse(localStorage.getItem('aiStats_' + GAME_DATA.activeSeed)) || {};
     let firstWarrants = JSON.parse(localStorage.getItem('firstWarrants_' + GAME_DATA.activeSeed) || "{}");
 
@@ -1536,12 +1556,10 @@ function endPlayerTurn() {
         aiStats.scans = 0; aiStats.cleared = 0; aiStats.tokens = 0; 
     }
 
-    // 🚨 VIRTUAL NOTEBOOK INITIALIZATION
     if (!aiStats.notebook) aiStats.notebook = { clearedRooms: [], clearedSuspects: [] };
-
     aiStats.loc = localStorage.getItem('aiLoc_' + GAME_DATA.activeSeed) || aiStats.loc;
 
-    // 1. SABOTAGE CHECK
+    // 1. SABOTAGE TRAP CHECK
     let sabotagedRoom = localStorage.getItem('sabotagedRoom_' + GAME_DATA.activeSeed);
     if (aiStats.loc === sabotagedRoom) {
         localStorage.removeItem('sabotagedRoom_' + GAME_DATA.activeSeed);
@@ -1549,146 +1567,158 @@ function endPlayerTurn() {
         aiStats.visited.push(aiStats.loc);
         let turnSummary = `<strong style="color:var(--accent);">ROUND ${GAME_DATA.round} A.I. SUMMARY</strong><br><br>Detective Alfred triggered your SABOTAGE trap in the ${aiStats.loc}! He lost his turn clearing the barricade.`;
         localStorage.setItem('aiStats_' + GAME_DATA.activeSeed, JSON.stringify(aiStats));
-        return showCustomAlert(turnSummary, () => { 
-            GAME_DATA.round++; 
-            localStorage.setItem('round_' + GAME_DATA.activeSeed, GAME_DATA.round); 
-            startRound(); 
-        });
+        return showCustomAlert(turnSummary, proceedToNextRound);
     }
 
-    // 2. A.I. DEDUCTION & SEARCH LOGIC
-    if (!aiStats.visited.includes(aiStats.loc)) {
-        aiStats.visited.push(aiStats.loc);
-        aiStats.cleared++;
-        let occ = GAME_DATA.solution.entities.find(e => e.loop[e.startIndex] === aiStats.loc);
-        
-        if (!occ || occ.name === "Nobody") {
-            aiStats.possibleRooms = aiStats.possibleRooms.filter(r => r !== aiStats.loc);
-            // Update Virtual Notebook
-            aiStats.notebook.clearedRooms.push(aiStats.loc); 
-            aiStats.score += 50; 
-        }
+    // 2. THE INTELLIGENCE SCHEDULER
+    let occ = GAME_DATA.solution.entities.find(e => e.loop[e.startIndex] === aiStats.loc);
+    let actionLog = "";
+    let actionType = "TOSS"; // Default physical action
 
-        let filedWarrant = false;
-        let foundMajorEvidence = occ && ['K', 'W1'].includes(occ.id);
-        
-        if (foundMajorEvidence || GAME_DATA.round % 2 === 0) {
-            let possibleTargets = [];
-            if (occ && ['K', 'A', 'W1'].includes(occ.id) && firstWarrants[aiStats.loc] !== 'AI') {
-                possibleTargets.push({ room: aiStats.loc, ent: occ });
+    // Logic Refresh Rate based on Tier
+    let isLogicTurn = false;
+    if (diff === 'hard') isLogicTurn = true; 
+    if (diff === 'normal' && GAME_DATA.round % 2 === 0) isLogicTurn = true;
+    if (diff === 'rookie' && GAME_DATA.round % 3 === 0) isLogicTurn = true;
+
+    // If standing in an empty room during a Logic Turn, Alfred uses the Action Tab tools!
+    if (isLogicTurn && (!occ || occ.name === "Nobody")) {
+        let smartActions = ["CANVASS", "WIRETAP", "BRIBE"];
+        if (diff === 'rookie') smartActions = ["CANVASS"]; // Rookies only canvass
+        actionType = smartActions[Math.floor(Math.random() * smartActions.length)];
+    }
+
+    // EXECUTE CHOSEN ACTION
+    if (actionType === "CANVASS") {
+        aiStats.scans++;
+        aiStats.score += 50;
+        actionLog = `Alfred silently canvassed the area around the ${aiStats.loc}, eliminating false leads.`;
+        let unvisited = GAME_DATA.locations.map(l=>l.id).filter(r => !aiStats.notebook.clearedRooms.includes(r) && r !== 'HALLWAY' && r !== 'STAIRCASE');
+        if (unvisited.length > 2) aiStats.notebook.clearedRooms.push(unvisited[0], unvisited[1]);
+    } 
+    else if (actionType === "WIRETAP") {
+        aiStats.score += 75;
+        actionLog = `Alfred tapped the mansion's intercom from the ${aiStats.loc}, sweeping a massive area.`;
+        let empties = GAME_DATA.solution.entities.filter(e => e.id === 'I' && e.name === 'Nobody').map(e => e.loop[e.startIndex]);
+        empties.forEach(r => { if(!aiStats.notebook.clearedRooms.includes(r)) aiStats.notebook.clearedRooms.push(r); });
+    }
+    else if (actionType === "BRIBE") {
+        aiStats.score += 100;
+        actionLog = `Alfred met with a confidential informant in the ${aiStats.loc} and crossed a major suspect off his list.`;
+        let innocents = GAME_DATA.solution.entities.filter(e => e.id === 'I' && e.name !== 'Nobody').map(e => e.name);
+        innocents.forEach(s => { if(!aiStats.notebook.clearedSuspects.includes(s)) aiStats.notebook.clearedSuspects.push(s); });
+    }
+    else {
+        // Physical Toss / Interrogation
+        if (occ && (occ.id === 'K' || occ.id === 'A' || (occ.id === 'I' && occ.name !== 'Nobody'))) {
+            if (!aiStats.interrogated.includes(occ.name)) {
+                aiStats.interrogated.push(occ.name);
+                aiStats.notebook.clearedSuspects.push(occ.name);
+                aiStats.score += 100;
+                actionLog = `Alfred conducted a ruthless interrogation of ${occ.name} in the ${aiStats.loc}.`;
+            } else {
+                aiStats.score += 25;
+                actionLog = `Alfred double-checked the ${aiStats.loc} but found nothing new.`;
             }
-            let connObj = GAME_DATA.roomConnections[aiStats.loc] || {};
-            let neighbors = Object.keys(connObj).filter(k => k !== 'floor').map(k => connObj[k]).filter(n => n && String(n).toLowerCase() !== 'none');
-            
-            neighbors.forEach(n => {
-                let nOcc = GAME_DATA.solution.entities.find(e => e.loop[e.startIndex] === n);
-                if (nOcc && ['K', 'A', 'W1'].includes(nOcc.id) && firstWarrants[n] !== 'AI') {
-                    possibleTargets.push({ room: n, ent: nOcc });
-                }
-            });
+        } else if (occ && ['W1', 'W2'].includes(occ.id)) {
+            aiStats.score += 150;
+            actionLog = `Alfred uncovered physical weapon evidence stashed in the ${aiStats.loc}!`;
+        } else {
+            aiStats.notebook.clearedRooms.push(aiStats.loc);
+            aiStats.score += 50;
+            actionLog = `Alfred completely tossed the ${aiStats.loc} and proved it was empty.`;
+        }
+    }
 
-            if (possibleTargets.length > 0) {
-                filedWarrant = true;
-                let target = possibleTargets[Math.floor(Math.random() * possibleTargets.length)];
-                if (!firstWarrants[target.room]) {
-                    firstWarrants[target.room] = 'AI';
-                    aiStats.score += (target.ent.id === 'K' ? 300 : 150);
-                    aiStats.tokens = (aiStats.tokens || 0) + 1; 
-                    aiStats.rank = (aiStats.rank || 0) + 1;
-                }
-            }
-        }
-        
-        if (!filedWarrant && occ && occ.name !== "Nobody") {
-            aiStats.score += 75; 
-        }
-        aiStats.time += 60;
-        
-    } else if (!aiStats.interrogated.includes(aiStats.loc) && GAME_DATA.solution.entities.some(e => e.loop[e.startIndex] === aiStats.loc && (e.id==='A' || (e.id==='I' && e.name !== 'Nobody')))) {
-        aiStats.interrogated.push(aiStats.loc);
-        aiStats.scans++; 
-        aiStats.clues++;
-        
-        let occ = GAME_DATA.solution.entities.find(e => e.loop[e.startIndex] === aiStats.loc && (e.id==='A' || (e.id==='I' && e.name !== 'Nobody')));
-        if (occ) {
-            // Update Virtual Notebook
-            aiStats.notebook.clearedSuspects.push(occ.name); 
-        }
+    aiStats.visited.push(aiStats.loc);
+    aiStats.cleared++;
 
-        if (aiStats.possibleSuspects.length > 1) aiStats.possibleSuspects.shift(); 
-        if (Math.random() > 0.5 && aiStats.possibleSuspects.length > 1) aiStats.possibleSuspects.shift(); 
-        
-        aiStats.score += 100; 
-        aiStats.time += 60;
-    } else {
-        if (aiStats.possibleRooms.length > 1) {
-            aiStats.possibleRooms.shift(); 
-            aiStats.clues++;
+    // WARRANTS & SOLVING
+    let foundMajorEvidence = occ && ['K', 'W1'].includes(occ.id);
+    if (foundMajorEvidence || (diff === 'hard' && GAME_DATA.round % 3 === 0)) {
+        if (!firstWarrants[aiStats.loc]) {
+            firstWarrants[aiStats.loc] = 'AI';
+            aiStats.score += 300;
+            aiStats.tokens = (aiStats.tokens || 0) + 1; 
+            aiStats.rank = (aiStats.rank || 0) + 1;
+            actionLog += ` He immediately filed a Search Warrant!`;
         }
-        aiStats.time += 30;
+    }
+
+    // SILENT TELL: Log his intelligence to the player's notebook!
+    saveLog(`<span style="color:#ff6b6b; font-weight:bold;">A.I. Action:</span> ${actionLog}`);
+
+       // 🚨 UPDATED WIN CONDITION: Only solve if he has found the 3 specific answers
+    // He keeps searching rooms even if he has partial info!
+    let k = GAME_DATA.solution.entities.find(e => e.id === 'K');
+    let a = GAME_DATA.solution.entities.find(e => e.id === 'A');
+    let w = GAME_DATA.solution.entities.find(e => e.id === 'W1');
+
+    // Alfred's "Deduction Confidence"
+    if (aiStats.notebook.clearedRooms.includes(k.loop[k.startIndex]) && 
+        aiStats.notebook.clearedSuspects.includes(k.name) &&
+        aiStats.notebook.clearedRooms.includes(w.loop[w.startIndex])) {
+        aiStats.readyToSolve = true;
     }
 
     localStorage.removeItem('policeTapeFloor_' + GAME_DATA.activeSeed);
     localStorage.setItem('firstWarrants_' + GAME_DATA.activeSeed, JSON.stringify(firstWarrants));
-    
-    if (aiStats.possibleSuspects.length <= 2 && aiStats.possibleRooms.length <= 4 && aiStats.clues >= 2) {
-        aiStats.readyToSolve = true;
-    }
-    
     localStorage.setItem('aiStats_' + GAME_DATA.activeSeed, JSON.stringify(aiStats));
 
     if (aiStats.readyToSolve) {
         aiStats.score += 1000; 
         localStorage.setItem('aiStats_' + GAME_DATA.activeSeed, JSON.stringify(aiStats));
         let pScore = parseInt(localStorage.getItem('playerScore_' + GAME_DATA.activeSeed)) || 0;
-        return showCustomAlert(`<span style='color:#ff6b6b; font-weight:bold;'>CASE STOLEN!</span><br><br>Detective Alfred deduced the solution. You were too slow!<br><br><strong style="color:var(--gold);">Final Scores:</strong><br>Detective Alfred: <strong style="color:#ff6b6b;">${aiStats.score} Pts</strong><br>You: <strong>${pScore} Pts</strong>`, hardReset); 
+        return showCustomAlert(`<span style='color:#ff6b6b; font-weight:bold;'>CASE STOLEN!</span><br><br>Detective Alfred cracked the case! He found the killer, the weapon, and the hiding spot.<br><br><strong style="color:var(--gold);">Final Scores:</strong><br>Detective Alfred: <strong style="color:#ff6b6b;">${aiStats.score} Pts</strong><br>You: <strong>${pScore} Pts</strong>`, hardReset); 
     } 
 
-    // 3. ALFRED ITEM SNIPING LOGIC (With Callback chaining)
+
+    // 3. ALFRED ITEM SNIPING LOGIC
     let assignments = JSON.parse(localStorage.getItem('itemAssignments_' + GAME_DATA.activeSeed) || "{}");
-    let aiItems = JSON.parse(localStorage.getItem('aiItems_' + GAME_DATA.activeSeed) || "[]");
-    let hItems = JSON.parse(localStorage.getItem('hiddenItemsByAI_' + GAME_DATA.activeSeed) || "{}");
-    
     let itemHere = assignments[aiStats.loc];
-    let snipableItems = ["Key", "Ladder", "Torchlight"];
-    let negativeEvents = ["Ambushed in the Dark", "Smear Campaign"];
     
-    let proceedToNextRound = () => {
+    function proceedToNextRound() {
         GAME_DATA.round++;
         localStorage.setItem('round_' + GAME_DATA.activeSeed, GAME_DATA.round); 
         startRound();
-    };
+    }
 
     if (itemHere) {
         delete assignments[aiStats.loc];
         localStorage.setItem('itemAssignments_' + GAME_DATA.activeSeed, JSON.stringify(assignments));
+        
+        let snipableItems = ["Key", "Ladder", "Torchlight"];
+        let negativeEvents = ["Ambushed in the Dark", "Smear Campaign"];
 
         if (negativeEvents.includes(itemHere)) {
             aiStats.time += 30; 
             localStorage.setItem('aiStats_' + GAME_DATA.activeSeed, JSON.stringify(aiStats));
-            saveLog(`<b>Precinct Update:</b> Alfred triggered a trap in the ${aiStats.loc}!`);
             return showCustomAlert(`🚨 <b>Hazard Encountered</b><br>Detective Alfred triggered a trap in the <b>${aiStats.loc}</b>! He suffers a 30-minute delay.<br><br><b>Please remove the Item token from the ${aiStats.loc} board. (Do not look at it)</b>`, proceedToNextRound);
         } 
         else if (snipableItems.includes(itemHere)) {
+            let aiItems = JSON.parse(localStorage.getItem('aiItems_' + GAME_DATA.activeSeed) || "[]");
+            let hItems = JSON.parse(localStorage.getItem('hiddenItemsByAI_' + GAME_DATA.activeSeed) || "{}");
+            
             aiItems.push(itemHere); 
             let safeRooms = GAME_DATA.locations.map(l => l.id).filter(r => !['HALLWAY', 'STAIRCASE', aiStats.loc].includes(r));
-            let hideSpot = safeRooms[Math.floor(Math.random() * safeRooms.length)];
-            hItems[itemHere] = hideSpot;
+            hItems[itemHere] = safeRooms[Math.floor(Math.random() * safeRooms.length)];
             
             localStorage.setItem('aiItems_' + GAME_DATA.activeSeed, JSON.stringify(aiItems));
             localStorage.setItem('hiddenItemsByAI_' + GAME_DATA.activeSeed, JSON.stringify(hItems));
             
-            saveLog(`<b>Precinct Update:</b> Alfred secured an item in the ${aiStats.loc}!`);
-            return showCustomAlert(`🚨 <b>Evidence Confiscated</b><br>Detective Alfred just found a hidden item in the <b>${aiStats.loc}</b>!<br><br>He has re-stashed it somewhere else in the mansion so you cannot use it.<br><br><b>Please remove the Item token from the ${aiStats.loc} on the physical board! (Do not look at it)</b>`, proceedToNextRound);
+            return showCustomAlert(`🚨 <b>Evidence Confiscated</b><br>Detective Alfred found a hidden item in the <b>${aiStats.loc}</b>!<br><br>He has re-stashed it somewhere else in the mansion.<br><br><b>Please remove the Item token from the ${aiStats.loc} on the physical board!</b>`, proceedToNextRound);
         }
         else {
-            saveLog(`<b>Precinct Update:</b> Alfred discarded an item in the ${aiStats.loc}.`);
-            return showCustomAlert(`🚨 <b>Evidence Confiscated</b><br>Detective Alfred just found a hidden item in the <b>${aiStats.loc}</b>! He secured it for his own case file.<br><br><b>Please remove the Item token from the ${aiStats.loc} on the physical board! (Do not look at it)</b>`, proceedToNextRound);
+            return showCustomAlert(`🚨 <b>Evidence Confiscated</b><br>Detective Alfred secured a hidden item in the <b>${aiStats.loc}</b>!<br><br><b>Please remove the Item token from the ${aiStats.loc} on the physical board! (Do not look at it)</b>`, proceedToNextRound);
         }
     }
 
-    // No item interacted with
-    proceedToNextRound();
+        // 🚨 FORCE ALFRED TO MOVE AND ANNOUNCE IMMEDIATELY!
+    let aiLoc = localStorage.getItem('aiLoc_' + GAME_DATA.activeSeed);
+    let alertMsg = `<strong style="color:var(--gold);">A.I. INVESTIGATION</strong><br><br>Detective Alfred has moved to the <strong>${aiLoc}</strong>!<br><br><span style='font-size:0.95rem; color:#bbb;'>* Move Alfred's physical pawn to the ${aiLoc} on the board.</span>`;
+
+    // Only proceed to the next round once the player acknowledges where Alfred moved
+    showCustomAlert(alertMsg, proceedToNextRound);
 }
 
 
@@ -1887,7 +1917,7 @@ async function load() {
             return { name: String(r[0]).trim(), traits: extractedTraits };
         });
 
-        const cHeaders = cData[0] || [];
+                        const cHeaders = cData[0] || [];
         GAME_DATA.roomConnections = {};
         cData.slice(1).forEach(row => {
             let rowObj = {};
@@ -1898,11 +1928,18 @@ async function load() {
             GAME_DATA.roomConnections[locName] = { floor: row[1] ? norm(row[1]) : 'none' };
             Object.keys(rowObj).forEach(k => {
                 if (["NORTH", "SOUTH", "EAST", "WEST", "UP", "DOWN"].includes(k)) {
-                    const val = rowObj[k];
-                    if (val && String(val).toLowerCase() !== "none") GAME_DATA.roomConnections[locName][k] = resolveRoomName(String(val));
+                    let val = rowObj[k];
+                    if (val) {
+                        // 🚨 BULLETPROOF SANITIZER: Destroys dashes, symbols, and blanks!
+                        let safeVal = String(val).replace(/[^a-zA-Z\s]/g, '').trim(); 
+                        if (safeVal !== '' && safeVal.toLowerCase() !== 'none' && safeVal.toLowerCase() !== 'na') {
+                            GAME_DATA.roomConnections[locName][k] = resolveRoomName(safeVal);
+                        }
+                    }
                 }
             });
         });
+
 
         if (!GAME_DATA.locations.find(l => l.id === 'HALLWAY')) {
             GAME_DATA.locations.push({ id: 'HALLWAY', traits: ['Wooden Floor'] });
@@ -2231,7 +2268,7 @@ if (item === "Torchlight" && room === "CELLAR") valid = false;                if
                 The <strong>${lockedRoom}</strong> has been secured. You must possess the Key to enter.
             </div>
             <strong style='color:var(--gold); font-size:1.1rem;'>Mansion Map Setup:</strong><br>
-            <span style='font-size:0.85rem; color:#555;'>Place 1 Item token in each of the following 8 rooms:</span>
+            <span style='font-size:0.85rem; color:#555;'>Place 1 unknown Item token in each of the following 8 rooms:</span>
             <ul style='margin-top:10px; padding-left:20px; font-size:0.95rem; color:var(--ink);'>
         `;
         
@@ -2480,6 +2517,24 @@ if (dest === 'CELLAR' && !hasTorch) {
 }
 
 
+function promptActionConfirm(message, confirmCallback, yesText = "Confirm", noText = "Cancel") {
+    document.getElementById('action-confirm-desc').innerHTML = message;
+    let yesBtn = document.getElementById('action-confirm-yes');
+    let noBtn = document.querySelector('#action-confirm-modal .btn-secondary');
+    
+    if (yesBtn) yesBtn.innerText = yesText;
+    if (noBtn) noBtn.innerText = noText;
+    
+    let newYesBtn = yesBtn.cloneNode(true);
+    yesBtn.parentNode.replaceChild(newYesBtn, yesBtn);
+    
+    newYesBtn.addEventListener('click', () => {
+        document.getElementById('action-confirm-modal').style.display = 'none';
+        confirmCallback();
+    });
+    
+    document.getElementById('action-confirm-modal').style.display = 'flex';
+}
 
 
 function checkLocationAbilities() {
@@ -2506,9 +2561,11 @@ function checkLocationAbilities() {
         } else {
             tossBtn.style.opacity = '1';
             tossBtn.style.pointerEvents = 'auto';
+                       tossBtn.className = "btn btn-secondary";
             tossBtn.innerHTML = "🔍 Toss the Room <br><span style='font-size:0.75rem; font-weight:normal;'>(4 AP ⚡)</span>";
         }
     }
+
 
         let workerBtn = document.getElementById('btn-worker');
     if (intBtn && GAME_DATA.solution) {
@@ -2764,7 +2821,7 @@ function openScannerTab() {
                         localStorage.setItem('foundItems_' + GAME_DATA.activeSeed, JSON.stringify(foundItems));
                         
                         saveLog(`Discovered hidden item in ${scannedRoom.id}: ${itemFound} (-1 AP)`);
-                        return showCustomAlert(`<span style='color:var(--gold); font-weight:bold;'>ITEM DISCOVERED</span><br><br>You found a <strong>${itemFound}</strong>!<br><br><span style='font-size:0.85rem; color:#bbb;'>* Take the unknown token from the board and swap it for the ${itemFound} card. You may need to scan it later!</span>`, checkPhaseTransition);
+                        return showCustomAlert(`<span style='color:var(--gold); font-weight:bold;'>ITEM DISCOVERED</span><br><br>You found a <strong>${itemFound}</strong>!<br><br><span style='font-size:0.85rem; color:#bbb;'>* Take the Item Token from the board and swap it for the ${itemFound} card. You may need to scan it later!</span>`, checkPhaseTransition);
                     } else {
                         // Instant events (like Syringe, Ledger, or Ambush)
                         saveLog(`Triggered hidden event in ${scannedRoom.id} (-1 AP)`);
@@ -3064,9 +3121,11 @@ function executeSearchCurrentRoom() {
             let pRep = parseInt(localStorage.getItem('playerRep_' + GAME_DATA.activeSeed)) || 0;
             localStorage.setItem('playerRep_' + GAME_DATA.activeSeed, pRep - 2);
             
-            reportText = `<span style="color:#ff6b6b; font-size:1.1rem; font-weight:bold; text-transform:uppercase;">⚠️ Department Warning</span><br>You have tossed ${totalTosses} rooms! The Chief has received too many noise complaints about your destruction of property. You lose <strong style="color:#ff6b6b;">2 Reputation</strong>!<br><br>`;
+            reportText = `<span style="color:#ff6b6b; font-size:1.1rem; font-weight:bold; text-transform:uppercase;">⚠️ Department Penalty: Destruction of Property</span><br>You have forcefully tossed ${totalTosses} rooms! The Chief has received too many noise and damage complaints. You lose <strong style="color:#ff6b6b;">2 Reputation</strong>!<br><span style="font-size:0.85rem; color:#bbb;">* Move your Reputation Tracker -2 on your physical Officer Stats sheet.</span><br><br>`;
             updateStatsUI();
         } else {
+
+
             let tossesLeft = 3 - totalTosses;
             reportText = `<span style="color:#4ade80; font-size:0.85rem;">(You can safely toss ${tossesLeft} more room(s) this case).</span><br><br>`;
         }
@@ -3232,7 +3291,7 @@ function updateBribeOptions() {
         `;
     }
 
-    // 2. Update the 'Bribe Amount' text dynamically (Capped at $300)
+        // 2. Update the 'Bribe Amount' text dynamically (Capped at $300)
     if (currentType === 'location') {
         tierSel.innerHTML = `
             <option value="100">$100 💰 - Floor</option>
@@ -3244,9 +3303,15 @@ function updateBribeOptions() {
             <option value="100">$100 💰 - 1 Physical Trait</option>
             <option value="300">$300 💰 - This OR That Trait</option>
         `;
+    } else if (currentType === 'category') {
+        tierSel.innerHTML = `
+            <option value="100">$100 💰 - Eliminate 1 Category</option>
+            <option value="300">$300 💰 - This OR That Category</option>
+        `;
     }
 
 }
+
 
 function executeBribe() {
     if (GAME_DATA.activePhase !== 'LOG') return showCustomAlert("You must select the LOG phase first.");
@@ -3804,34 +3869,35 @@ function executeAssistantTravel() {
 
 function calculateAIMove(currentLoc) {
     let diff = localStorage.getItem('activeDifficulty_' + GAME_DATA.activeSeed) || 'normal';
-    let aiStats = JSON.parse(localStorage.getItem('aiStats_' + GAME_DATA.activeSeed)) || { visited: [] };
-    let visited = aiStats.visited || [];
-    let notebook = aiStats.notebook || { clearedRooms: [], clearedSuspects: [] }; // The Notebook
-    let allRooms = GAME_DATA.locations.map(l => l.id);
+    let aiStats = JSON.parse(localStorage.getItem('aiStats_' + GAME_DATA.activeSeed)) || {};
+    let notebook = aiStats.notebook || { clearedRooms: [] };
+    let allRooms = GAME_DATA.locations.map(l => l.id).filter(r => r !== 'HALLWAY' && r !== 'STAIRCASE');
 
-    let unvisited = allRooms.filter(r => !visited.includes(r) && r !== 'HALLWAY' && r !== 'STAIRCASE' && r !== currentLoc);
-    
-    // Failsafe if he cleared the whole board
-    if (unvisited.length === 0) {
+    let unvisited = allRooms.filter(r => !notebook.clearedRooms.includes(r) && r !== currentLoc);
+    if (unvisited.length === 0) unvisited = allRooms.filter(r => r !== currentLoc);
+
+    let targetRoom = null;
+
+    // 🚨 HARDBOILED: Hunts the actual exact targets (Simulates brilliant deduction)
+    if (diff === 'hard') {
+        let trueRooms = GAME_DATA.solution.entities.filter(e => ['K', 'W1'].includes(e.id)).map(e => e.loop[e.startIndex]);
+        let remainingTrue = trueRooms.filter(r => !notebook.clearedRooms.includes(r));
+        
+        if (remainingTrue.length > 0) targetRoom = remainingTrue[Math.floor(Math.random() * remainingTrue.length)];
+        else targetRoom = unvisited[Math.floor(Math.random() * unvisited.length)];
+    }
+    // 🚨 PRIVATE EYE: Logically hunts uncleared rooms
+    else if (diff === 'normal') {
+        targetRoom = unvisited[Math.floor(Math.random() * unvisited.length)];
+    }
+    // 🚨 ROOKIE: Randomly wanders the mansion
+    else {
         let connObj = GAME_DATA.roomConnections[currentLoc] || {};
-        let neighbors = Object.keys(connObj).filter(k => k !== 'floor').map(k => connObj[k]).filter(n => n && n !== 'NONE');
+        let neighbors = Object.keys(connObj).filter(k => ["NORTH","SOUTH","EAST","WEST","UP","DOWN"].includes(k)).map(k => connObj[k]).filter(n => n && String(n).toLowerCase() !== 'none');
         return neighbors.length > 0 ? neighbors[Math.floor(Math.random() * neighbors.length)] : currentLoc;
     }
 
-    // 🚨 NEW: THE NOTEBOOK ALGORITHM
-    // Alfred uses his notebook to hunt uncleared rooms instead of wandering randomly.
-    let trackingChance = (diff === 'hard') ? 0.90 : (diff === 'normal') ? 0.60 : 0.30;
-    let targetRoom = null;
-
-    if (Math.random() < trackingChance) {
-        // Find rooms that have NOT been cleared by his notebook
-        let possibleTargets = unvisited.filter(r => !notebook.clearedRooms.includes(r));
-        if (possibleTargets.length > 0) {
-            targetRoom = possibleTargets[Math.floor(Math.random() * possibleTargets.length)];
-        }
-    }
-
-    // 2. BFS (Breadth-First Search) to find the fastest path to his target
+    // BFS Pathfinding to the Target
     let queue = [[currentLoc]];
     let bfsVisited = new Set([currentLoc]);
     let shortestPath = null;
@@ -3840,18 +3906,13 @@ function calculateAIMove(currentLoc) {
         let path = queue.shift();
         let node = path[path.length - 1];
 
-        // Did he find the target room?
-        if (targetRoom) {
-            if (node === targetRoom) { shortestPath = path; break; }
-        } else {
-            // Fallback: Just walk to nearest unvisited
-            if (unvisited.includes(node) && node !== currentLoc) { shortestPath = path; break; }
-        }
+        if (node === targetRoom) { shortestPath = path; break; }
 
         let connObj = GAME_DATA.roomConnections[node] || {};
-        let neighbors = Object.keys(connObj).filter(k => k !== 'floor').map(k => connObj[k]).filter(n => n && n !== 'NONE');
+        let neighbors = Object.keys(connObj).filter(k => ["NORTH","SOUTH","EAST","WEST","UP","DOWN"].includes(k)).map(k => connObj[k]).filter(n => n && String(n).toLowerCase() !== 'none');
 
-        // 🚨 ALFRED RESPECTS LOCKED DOORS UNLESS HE STOLE THE ITEMS!
+        if (!neighbors.includes("STAIRCASE") && node !== "STAIRCASE") neighbors.push("STAIRCASE");
+
         let aiItems = JSON.parse(localStorage.getItem('aiItems_' + GAME_DATA.activeSeed) || "[]");
         let lockedRoomId = localStorage.getItem('lockedRoom_' + GAME_DATA.activeSeed);
 
@@ -3870,15 +3931,11 @@ function calculateAIMove(currentLoc) {
         }
     }
 
-    // 3. Step forward
     if (shortestPath && shortestPath.length > 1) {
-        if (diff === 'hard' && shortestPath.length > 2) return shortestPath[2];
+        if (diff === 'hard' && shortestPath.length > 2) return shortestPath[2]; // Hardboiled sprints 2 rooms!
         return shortestPath[1];
     }
-
-    let fallbackConn = GAME_DATA.roomConnections[currentLoc] || {};
-    let fallbackNeighbors = Object.keys(fallbackConn).filter(k => k !== 'floor').map(k => fallbackConn[k]).filter(n => n && n !== 'NONE');
-    return fallbackNeighbors.length > 0 ? fallbackNeighbors[0] : currentLoc;
+    return unvisited[Math.floor(Math.random() * unvisited.length)] || currentLoc;
 }
 
 function checkPendingReports() {
