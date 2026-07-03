@@ -2561,31 +2561,34 @@ function checkLocationAbilities() {
     let isTossed = localStorage.getItem('tossedRoom_' + GAME_DATA.activeSeed + '_' + loc);
     let isInterrogated = localStorage.getItem('interrogated_' + GAME_DATA.activeSeed + '_' + loc);
 
-                let firstWarrants = JSON.parse(localStorage.getItem('firstWarrants_' + GAME_DATA.activeSeed) || "{}");
-    let hasWarrant = firstWarrants[loc] === 'Player';
+    let firstWarrants = JSON.parse(localStorage.getItem('firstWarrants_' + GAME_DATA.activeSeed) || "{}");
+    let hasWarrant = firstWarrants[loc] === 'Player'; // Checks if Player successfully filed a report here
 
-            if (tossBtn) {
-        if (isTossed) {
+    if (tossBtn) {
+        if (hasWarrant) {
+            // 🚨 Completely hide the Toss button if the player already knows what's in here!
+            tossBtn.style.display = 'none';
+        } else if (isTossed) {
+            tossBtn.style.display = 'block';
+            tossBtn.className = "btn btn-secondary";
             tossBtn.style.opacity = '0.3';
             tossBtn.style.pointerEvents = 'none';
             tossBtn.innerHTML = "🔍 Room Tossed <br><span style='font-size:0.75rem; font-weight:normal;'>(Cleared)</span>";
-        } else if (hasWarrant) {
-            tossBtn.style.opacity = '1';
-            tossBtn.style.pointerEvents = 'auto';
-            tossBtn.innerHTML = "🔍 Toss the Room <br><span style='font-size:0.75rem; font-weight:normal; color:#4ade80;'>(2 AP ⚡ - Warrant Active)</span>";
         } else {
+            tossBtn.style.display = 'block';
+            tossBtn.className = "btn btn-secondary";
             tossBtn.style.opacity = '1';
             tossBtn.style.pointerEvents = 'auto';
-                        tossBtn.className = "btn btn-secondary";
             tossBtn.innerHTML = "🔍 Toss the Room <br><span style='font-size:0.75rem; font-weight:normal;'>(4 AP ⚡)</span>";
         }
     }
 
-
-        let workerBtn = document.getElementById('btn-worker');
+    let workerBtn = document.getElementById('btn-worker');
     if (intBtn && GAME_DATA.solution) {
         let occ = GAME_DATA.solution.entities.find(ent => ent.loop[ent.startIndex] === loc);
-        if (isTossed && occ && (occ.id === 'K' || occ.id === 'A' || (occ.id === 'I' && occ.name !== 'Nobody'))) {
+        
+        // 🚨 NEW: (isTossed || hasWarrant) instantly unlocks Suspect actions!
+        if ((isTossed || hasWarrant) && occ && (occ.id === 'K' || occ.id === 'A' || (occ.id === 'I' && occ.name !== 'Nobody'))) {
             intBtn.style.display = 'block';
             if (workerBtn) workerBtn.style.display = 'block'; // Show staff!
             
@@ -2604,9 +2607,9 @@ function checkLocationAbilities() {
         }
     }
 
-
     if(!btn) return;
     
+    // Setup the Special Actions based on Location
     if (loc === 'GARDEN' || loc === 'COURTYARD' || loc === 'BALCONY') {
         btn.innerHTML = "🔦 Walk the Perimeter <br><span style='font-size:0.75rem; font-style:italic;'>(2 AP ⚡)</span>";
         btn.style.display = 'block';
@@ -2623,6 +2626,7 @@ function checkLocationAbilities() {
         btn.style.display = 'none';
     }
 }
+
 
 
 
