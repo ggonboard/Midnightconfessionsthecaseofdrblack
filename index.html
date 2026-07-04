@@ -1193,22 +1193,38 @@ function updateStatsUI() {
             wBtn.disabled = true;
             wTxt.innerHTML = "(Max Warrants Filed ⏳)";
             wTxt.style.color = "#ff6b6b"; 
-        } else if (cRound > 1 && cRound % 2 !== 0) {
-            // Unlocks perfectly right after Round 2 ends (Rounds 3, 5, 7)
+                } else if (cRound === 1) {
+            wBtn.style.opacity = '0.4';
+            wBtn.style.pointerEvents = 'none';
+            wBtn.disabled = true;
+            wTxt.innerHTML = "(Unlocks on Round 2)";
+            wTxt.style.color = "#bbb"; 
+        } else if (cRound % 2 !== 0) {
+            // Odd Rounds: Free
             wBtn.style.opacity = '1';
             wBtn.style.pointerEvents = 'auto';
             wBtn.disabled = false;
             let left = 2 - pendingWarrants.length;
-            wTxt.innerHTML = `(Courier Available - ${left} Left)`;
+            wTxt.innerHTML = `(Free Courier - ${left} Left)`;
             wTxt.style.color = "#4ade80"; 
         } else {
-            // Locked during the 2-Round gathering phase (Rounds 1, 2, 4, 6)
-            wBtn.style.opacity = '0.4';
-            wBtn.style.pointerEvents = 'none';
-            wBtn.disabled = true;
-            let nextRound = (cRound % 2 === 0) ? cRound + 1 : cRound + 2;
-            wTxt.innerHTML = "(Unlocks on Round " + nextRound + ")";
-            wTxt.style.color = "#bbb"; 
+            // Even Rounds: Requires 3 AP
+            let currentAP = GAME_DATA.apSpent || 0; // Check your current AP usage
+            let hasEnoughAP = (8 - currentAP) >= 3; 
+            
+            if (hasEnoughAP) {
+                wBtn.style.opacity = '1';
+                wBtn.style.pointerEvents = 'auto';
+                wBtn.disabled = false;
+                wTxt.innerHTML = "(Emergency Courier: 3 AP ⚡)";
+                wTxt.style.color = "var(--gold)";
+            } else {
+                wBtn.style.opacity = '0.4';
+                wBtn.style.pointerEvents = 'none';
+                wBtn.disabled = true;
+                wTxt.innerHTML = "(Need 3 AP ⚡)";
+                wTxt.style.color = "#ff6b6b";
+            }
         }
     }
 }
@@ -1548,127 +1564,99 @@ function confirmEndRound() {
 }
 
 function endPlayerTurn() {
-    let diff = localStorage.getItem('activeDifficulty_' + GAME_DATA.activeSeed) || 'normal';
     let aiStats = JSON.parse(localStorage.getItem('aiStats_' + GAME_DATA.activeSeed)) || {};
-    let firstWarrants = JSON.parse(localStorage.getItem('firstWarrants_' + GAME_DATA.activeSeed) || "{}");
-
-    if (!aiStats.possibleRooms) {
-        aiStats.loc = localStorage.getItem('aiLoc_' + GAME_DATA.activeSeed) || GAME_DATA.locations[0].id;
-        aiStats.visited = [];
-        aiStats.interrogated = [];
-        aiStats.possibleRooms = GAME_DATA.locations.map(l => l.id);
-        aiStats.possibleSuspects = GAME_DATA.suspects.map(s => s.name);
-        aiStats.clues = 0; aiStats.time = 0; aiStats.score = 0; aiStats.readyToSolve = false;
-        aiStats.scans = 0; aiStats.cleared = 0; aiStats.tokens = 0; 
+    
+    if (!aiStats.notebook) {
+        aiStats.notebook = { clearedRooms: [], clearedSuspects: [] };
+        aiStats.visited = []; aiStats.interrogated = [];
+        aiStats.scans = 0; aiStats.cleared = 0; aiStats.score = 0; aiStats.tosses = 0;
+        aiStats.loc = localStorage.getItem('aiLoc_' + GAME_DATA.activeSeed) || "ENTRANCE HALL";
     }
 
-    if (!aiStats.notebook) aiStats.notebook = { clearedRooms: [], clearedSuspects: [] };
-    aiStats.loc = localStorage.getItem('aiLoc_' + GAME_DATA.activeSeed) || aiStats.loc;
+    // A.I. "Reads the Initial Case File" to eliminate rooms instantly on Round 1
+    if (GAME_DATA.round === 1) {
+        let emptyRooms = GAME_DATA.solution.entities.filter(e => e.id === 'I' && e.name === 'Nobody').map(e => e.loop[e.startIndex]);
+        emptyRooms.forEach(r => { if(!aiStats.notebook.clearedRooms.includes(r)) aiStats.notebook.clearedRooms.push(r); });
+    }
 
-    // 1. SABOTAGE TRAP CHECK
+    // 1. SABOTAGE TRAP CHECK (Interrupts turn)
     let sabotagedRoom = localStorage.getItem('sabotagedRoom_' + GAME_DATA.activeSeed);
     if (aiStats.loc === sabotagedRoom) {
         localStorage.removeItem('sabotagedRoom_' + GAME_DATA.activeSeed);
-        aiStats.time += 30; 
-        aiStats.visited.push(aiStats.loc);
         let turnSummary = `<strong style="color:var(--accent);">ROUND ${GAME_DATA.round} A.I. SUMMARY</strong><br><br>Detective Alfred triggered your SABOTAGE trap in the ${aiStats.loc}! He lost his turn clearing the barricade.`;
-        localStorage.setItem('aiStats_' + GAME_DATA.activeSeed, JSON.stringify(aiStats));
         return showCustomAlert(turnSummary, proceedToNextRound);
     }
 
-    // 2. THE INTELLIGENCE SCHEDULER
+    // 2. A.I. TAKES ACTION IN CURRENT ROOM
     let occ = GAME_DATA.solution.entities.find(e => e.loop[e.startIndex] === aiStats.loc);
     let actionLog = "";
-    let actionType = "TOSS"; // Default physical action
+    let actionType = "TOSS";
+    let smartActions = ["CANVASS", "WIRETAP", "BRIBE"];
 
-    // Logic Refresh Rate based on Tier
-    let isLogicTurn = false;
-    if (diff === 'hard') isLogicTurn = true; 
-    if (diff === 'normal' && GAME_DATA.round % 2 === 0) isLogicTurn = true;
-    if (diff === 'rookie' && GAME_DATA.round % 3 === 0) isLogicTurn = true;
-
-    // If standing in an empty room during a Logic Turn, Alfred uses the Action Tab tools!
-    if (isLogicTurn && (!occ || occ.name === "Nobody")) {
-        let smartActions = ["CANVASS", "WIRETAP", "BRIBE"];
-        if (diff === 'rookie') smartActions = ["CANVASS"]; // Rookies only canvass
+    // 🚨 TOSS LIMIT CHECK: Alfred can only toss 3 times in the entire game!
+    if (aiStats.tosses >= 3) {
         actionType = smartActions[Math.floor(Math.random() * smartActions.length)];
+    } else {
+        // If he hasn't reached the limit, he randomly chooses between tossing and deducing
+        if (Math.random() > 0.5 || (!occ || occ.name === "Nobody")) {
+            actionType = smartActions[Math.floor(Math.random() * smartActions.length)];
+        }
     }
 
-    // EXECUTE CHOSEN ACTION
+    // 🚨 VAGUE LOGBOOK ENTRIES: Player is kept in the dark about specific findings!
+    let maskedLoc = `the ${aiStats.loc}`;
     if (actionType === "CANVASS") {
-        aiStats.scans++;
-        aiStats.score += 50;
-        actionLog = `Alfred silently canvassed the area around the ${aiStats.loc}, eliminating false leads.`;
+        aiStats.scans++; aiStats.score += 50;
+        actionLog = `Detective Alfred was seen canvassing the area near ${maskedLoc}.`;
+        
         let unvisited = GAME_DATA.locations.map(l=>l.id).filter(r => !aiStats.notebook.clearedRooms.includes(r) && r !== 'HALLWAY' && r !== 'STAIRCASE');
         if (unvisited.length > 2) aiStats.notebook.clearedRooms.push(unvisited[0], unvisited[1]);
     } 
     else if (actionType === "WIRETAP") {
         aiStats.score += 75;
-        actionLog = `Alfred tapped the mansion's intercom from the ${aiStats.loc}, sweeping a massive area.`;
+        actionLog = `You notice Alfred consulting blueprints and checking connections near ${maskedLoc}.`;
         let empties = GAME_DATA.solution.entities.filter(e => e.id === 'I' && e.name === 'Nobody').map(e => e.loop[e.startIndex]);
         empties.forEach(r => { if(!aiStats.notebook.clearedRooms.includes(r)) aiStats.notebook.clearedRooms.push(r); });
     }
     else if (actionType === "BRIBE") {
         aiStats.score += 100;
-        actionLog = `Alfred met with a confidential informant in the ${aiStats.loc} and crossed a major suspect off his list.`;
+        actionLog = `Alfred was spotted meeting with a mysterious informant in ${maskedLoc}.`;
         let innocents = GAME_DATA.solution.entities.filter(e => e.id === 'I' && e.name !== 'Nobody').map(e => e.name);
         innocents.forEach(s => { if(!aiStats.notebook.clearedSuspects.includes(s)) aiStats.notebook.clearedSuspects.push(s); });
     }
     else {
-        // Physical Toss / Interrogation
-        if (occ && (occ.id === 'K' || occ.id === 'A' || (occ.id === 'I' && occ.name !== 'Nobody'))) {
+        aiStats.tosses++;
+        actionLog = `Alfred was observed conducting a thorough, noisy physical search of ${maskedLoc}.`;
+        if (occ) {
+            aiStats.score += (occ.id === 'K' || occ.id === 'A') ? 100 : 25;
             if (!aiStats.interrogated.includes(occ.name)) {
                 aiStats.interrogated.push(occ.name);
                 aiStats.notebook.clearedSuspects.push(occ.name);
-                aiStats.score += 100;
-                actionLog = `Alfred conducted a ruthless interrogation of ${occ.name} in the ${aiStats.loc}.`;
-            } else {
-                aiStats.score += 25;
-                actionLog = `Alfred double-checked the ${aiStats.loc} but found nothing new.`;
             }
-        } else if (occ && ['W1', 'W2'].includes(occ.id)) {
-            aiStats.score += 150;
-            actionLog = `Alfred uncovered physical weapon evidence stashed in the ${aiStats.loc}!`;
         } else {
-            aiStats.notebook.clearedRooms.push(aiStats.loc);
             aiStats.score += 50;
-            actionLog = `Alfred completely tossed the ${aiStats.loc} and proved it was empty.`;
         }
+        if (!aiStats.notebook.clearedRooms.includes(aiStats.loc)) aiStats.notebook.clearedRooms.push(aiStats.loc);
     }
 
     aiStats.visited.push(aiStats.loc);
     aiStats.cleared++;
-
-    // WARRANTS & SOLVING
-    let foundMajorEvidence = occ && ['K', 'W1'].includes(occ.id);
-    if (foundMajorEvidence || (diff === 'hard' && GAME_DATA.round % 3 === 0)) {
-        if (!firstWarrants[aiStats.loc]) {
-            firstWarrants[aiStats.loc] = 'AI';
-            aiStats.score += 300;
-            aiStats.tokens = (aiStats.tokens || 0) + 1; 
-            aiStats.rank = (aiStats.rank || 0) + 1;
-            actionLog += ` He immediately filed a Search Warrant!`;
-        }
-    }
-
-    // SILENT TELL: Log his intelligence to the player's notebook!
     saveLog(`<span style="color:#ff6b6b; font-weight:bold;">A.I. Action:</span> ${actionLog}`);
 
-       // 🚨 UPDATED WIN CONDITION: Only solve if he has found the 3 specific answers
-    // He keeps searching rooms even if he has partial info!
+    // 3. CHECK ALFRED'S WIN CONDITION
     let k = GAME_DATA.solution.entities.find(e => e.id === 'K');
     let a = GAME_DATA.solution.entities.find(e => e.id === 'A');
     let w = GAME_DATA.solution.entities.find(e => e.id === 'W1');
 
-    // Alfred's "Deduction Confidence"
     if (aiStats.notebook.clearedRooms.includes(k.loop[k.startIndex]) && 
         aiStats.notebook.clearedSuspects.includes(k.name) &&
         aiStats.notebook.clearedRooms.includes(w.loop[w.startIndex])) {
         aiStats.readyToSolve = true;
     }
 
-    localStorage.removeItem('policeTapeFloor_' + GAME_DATA.activeSeed);
-    localStorage.setItem('firstWarrants_' + GAME_DATA.activeSeed, JSON.stringify(firstWarrants));
+    // 4. ALFRED MOVES TO HIS NEXT ROOM
+    aiStats.loc = calculateAIMove(aiStats.loc);
+    localStorage.setItem('aiLoc_' + GAME_DATA.activeSeed, aiStats.loc);
     localStorage.setItem('aiStats_' + GAME_DATA.activeSeed, JSON.stringify(aiStats));
 
     if (aiStats.readyToSolve) {
@@ -1678,17 +1666,18 @@ function endPlayerTurn() {
         return showCustomAlert(`<span style='color:#ff6b6b; font-weight:bold;'>CASE STOLEN!</span><br><br>Detective Alfred cracked the case! He found the killer, the weapon, and the hiding spot.<br><br><strong style="color:var(--gold);">Final Scores:</strong><br>Detective Alfred: <strong style="color:#ff6b6b;">${aiStats.score} Pts</strong><br>You: <strong>${pScore} Pts</strong>`, hardReset); 
     } 
 
-
-    // 3. ALFRED ITEM SNIPING LOGIC
+    // 5. CHECK IF HE GRABBED AN ITEM IN HIS *NEW* ROOM
     let assignments = JSON.parse(localStorage.getItem('itemAssignments_' + GAME_DATA.activeSeed) || "{}");
     let itemHere = assignments[aiStats.loc];
-    
+    let movementAlertMsg = `<strong style="color:var(--gold);">A.I. INVESTIGATION</strong><br><br>Detective Alfred concluded his search and moved to the <strong>${aiStats.loc}</strong>!<br><br><span style='font-size:0.95rem; color:#bbb;'>* Move Alfred's physical pawn to the ${aiStats.loc} on the board.</span>`;
+
     function proceedToNextRound() {
         GAME_DATA.round++;
         localStorage.setItem('round_' + GAME_DATA.activeSeed, GAME_DATA.round); 
         startRound();
     }
 
+    // CHAIN POPUPS IF HE STEALS AN ITEM!
     if (itemHere) {
         delete assignments[aiStats.loc];
         localStorage.setItem('itemAssignments_' + GAME_DATA.activeSeed, JSON.stringify(assignments));
@@ -1697,9 +1686,9 @@ function endPlayerTurn() {
         let negativeEvents = ["Ambushed in the Dark", "Smear Campaign"];
 
         if (negativeEvents.includes(itemHere)) {
-            aiStats.time += 30; 
+            aiStats.score -= 50; 
             localStorage.setItem('aiStats_' + GAME_DATA.activeSeed, JSON.stringify(aiStats));
-            return showCustomAlert(`🚨 <b>Hazard Encountered</b><br>Detective Alfred triggered a trap in the <b>${aiStats.loc}</b>! He suffers a 30-minute delay.<br><br><b>Please remove the Item token from the ${aiStats.loc} board. (Do not look at it)</b>`, proceedToNextRound);
+            movementAlertMsg = `🚨 <b>Hazard Encountered</b><br>Detective Alfred triggered a trap in the <b>${aiStats.loc}</b>!<br><br><b>Please remove the Item token from the ${aiStats.loc} board. (Do not look at it)</b><br><hr>${movementAlertMsg}`;
         } 
         else if (snipableItems.includes(itemHere)) {
             let aiItems = JSON.parse(localStorage.getItem('aiItems_' + GAME_DATA.activeSeed) || "[]");
@@ -1712,19 +1701,133 @@ function endPlayerTurn() {
             localStorage.setItem('aiItems_' + GAME_DATA.activeSeed, JSON.stringify(aiItems));
             localStorage.setItem('hiddenItemsByAI_' + GAME_DATA.activeSeed, JSON.stringify(hItems));
             
-            return showCustomAlert(`🚨 <b>Evidence Confiscated</b><br>Detective Alfred found a hidden item in the <b>${aiStats.loc}</b>!<br><br>He has re-stashed it somewhere else in the mansion.<br><br><b>Please remove the Item token from the ${aiStats.loc} on the physical board!</b>`, proceedToNextRound);
+            movementAlertMsg = `🚨 <b>Evidence Confiscated</b><br>Detective Alfred found a hidden item in the <b>${aiStats.loc}</b>! He immediately re-stashed it somewhere else in the mansion to hide it from you.<br><br><b>Please remove the Item token from the ${aiStats.loc} on the physical board!</b><br><hr>${movementAlertMsg}`;
         }
         else {
-            return showCustomAlert(`🚨 <b>Evidence Confiscated</b><br>Detective Alfred secured a hidden item in the <b>${aiStats.loc}</b>!<br><br><b>Please remove the Item token from the ${aiStats.loc} on the physical board! (Do not look at it)</b>`, proceedToNextRound);
+            movementAlertMsg = `🚨 <b>Evidence Confiscated</b><br>Detective Alfred secured a hidden item in the <b>${aiStats.loc}</b>!<br><br><b>Please remove the Item token from the ${aiStats.loc} on the physical board! (Do not look at it)</b><br><hr>${movementAlertMsg}`;
         }
     }
 
-        // 🚨 FORCE ALFRED TO MOVE AND ANNOUNCE IMMEDIATELY!
-    let aiLoc = localStorage.getItem('aiLoc_' + GAME_DATA.activeSeed);
-    let alertMsg = `<strong style="color:var(--gold);">A.I. INVESTIGATION</strong><br><br>Detective Alfred has moved to the <strong>${aiLoc}</strong>!<br><br><span style='font-size:0.95rem; color:#bbb;'>* Move Alfred's physical pawn to the ${aiLoc} on the board.</span>`;
+    showCustomAlert(movementAlertMsg, proceedToNextRound);
+}
 
-    // Only proceed to the next round once the player acknowledges where Alfred moved
-    showCustomAlert(alertMsg, proceedToNextRound);
+function checkPendingReports() {
+    let reports = JSON.parse(localStorage.getItem('pendingReports_' + GAME_DATA.activeSeed) || "[]");
+    if (reports.length === 0) return;
+
+    let stillPending = [];
+    let verifiedMessages = [];
+    let firstWarrants = JSON.parse(localStorage.getItem('firstWarrants_' + GAME_DATA.activeSeed) || "{}");
+    
+    let playerScore = parseInt(localStorage.getItem('playerScore_' + GAME_DATA.activeSeed) || 0);
+    let playerRank = parseInt(localStorage.getItem('playerRank_' + GAME_DATA.activeSeed) || 1); 
+    let playerRep = parseInt(localStorage.getItem('playerRep_' + GAME_DATA.activeSeed) || 0);
+    let aiStats = JSON.parse(localStorage.getItem('aiStats_' + GAME_DATA.activeSeed)) || { rank: 0, rep: 0 };
+
+    reports.forEach(rep => {
+        if (GAME_DATA.timeSpent >= rep.verificationTime) {
+            let actualEnt = GAME_DATA.solution.entities.find(e => e.loop[e.startIndex] === rep.room);
+            let actualType = actualEnt ? actualEnt.id : "I_Empty";
+            if(actualType === 'I' && actualEnt.name !== 'Nobody') actualType = 'I_Innocent';
+            if(actualType === 'I' && actualEnt.name === 'Nobody') actualType = 'I_Empty';
+
+            let isCorrect = (rep.guess === actualType) || (rep.guess === 'K' && actualType === 'K');
+
+            if (isCorrect) {
+                let pts = 0;
+                let tokenReward = 0;
+                let repReward = 0;
+                let rankReward = 0;
+                let rankTxt = "";
+
+                if (rep.guess === 'K') { 
+                    pts = 300; tokenReward = 100; repReward = 2; rankReward = 1; rankTxt = "Killer Located";
+                } else if (rep.guess === 'W1') { 
+                    pts = 100; tokenReward = 100; repReward = 1; rankReward = 1; rankTxt = "Weapon Found";
+                } else { 
+                    pts = 50; tokenReward = 50; repReward = 1; rankReward = 1; rankTxt = "Area Secured";
+                }
+
+                GAME_DATA.tokens = parseInt(localStorage.getItem('tokens_' + GAME_DATA.activeSeed) || 0) + tokenReward;
+                localStorage.setItem('tokens_' + GAME_DATA.activeSeed, GAME_DATA.tokens);
+                
+                playerScore += pts;
+                playerRep += repReward;
+                playerRank += rankReward;
+
+                let rewardStr = `+${pts} Pts, +$${tokenReward}, +${repReward} Rep, +${rankReward} Rank`;
+                verifiedMessages.push(`Warrant on <strong>${rep.room}</strong>: <span style="color:#4ade80; font-weight:bold;">CONFIRMED</span><br><span style="font-size:0.85rem; color:#ccc;">${rankTxt}. (${rewardStr})</span>`);
+                saveLog(`Lab Result: Warrant for ${rep.room} - CONFIRMED`);
+            } else {
+                playerScore -= 50;
+                verifiedMessages.push(`Report on <strong>${rep.room}</strong>: <span style="color:#ff6b6b; font-weight:bold;">REJECTED</span><br><span style="font-size:0.85rem; color:#ccc;">Incorrect identification. (-50 Pts)</span>`);
+                saveLog(`Lab Result: Report for ${rep.room} - REJECTED`);
+            }
+        } else {
+            stillPending.push(rep); 
+        }
+    });
+
+    localStorage.setItem('playerScore_' + GAME_DATA.activeSeed, playerScore);
+    localStorage.setItem('playerRank_' + GAME_DATA.activeSeed, playerRank); 
+    localStorage.setItem('playerRep_' + GAME_DATA.activeSeed, playerRep); 
+    localStorage.setItem('pendingReports_' + GAME_DATA.activeSeed, JSON.stringify(stillPending));
+    localStorage.setItem('tokens_' + GAME_DATA.activeSeed, GAME_DATA.tokens);
+    updateStatsUI();
+
+    if (verifiedMessages.length > 0) {
+        let labAlert = document.getElementById('lab-alert');
+        if (!labAlert) {
+            labAlert = document.createElement('div');
+            labAlert.id = 'lab-alert';
+            labAlert.style.cssText = "position:fixed; top:20px; left:50%; transform:translateX(-50%); background:var(--paper); color:var(--ink); padding:15px; border-radius:8px; z-index:9999; text-align:center; box-shadow:0 4px 15px rgba(0,0,0,0.5); border: 3px solid var(--accent); font-family:'Crimson Text'; font-size:1.1rem; width: 90%; max-width: 350px;";
+            document.body.appendChild(labAlert);
+        }
+        labAlert.innerHTML = `<strong style="color:var(--accent); text-transform:uppercase;">Lab Results Returned</strong><hr style="border:1px solid #ddd; margin:10px 0;"><div style="line-height:1.6;">${verifiedMessages.join('<br><br>')}</div><br><span style="font-size:0.85rem; color:#bbb;">* Update your Rank, Reputation, and Tokens on your physical Officer Stats sheet!</span><button class="btn btn-crimson" onclick="this.parentElement.style.display='none'" style="margin-top:15px; width:100%; padding:8px; font-size:0.9rem;">Dismiss</button>`;
+        labAlert.style.display = 'block';
+        if (typeof playDing === 'function') playDing();
+    }
+}
+
+function executeFieldReport() {
+    if (GAME_DATA.activePhase !== 'LOG') return showCustomAlert("You must select the LOG phase first.");
+
+    let r = document.getElementById('report-room').value;
+    let g = document.getElementById('report-entity').value;
+    let gName = document.getElementById('report-entity').options[document.getElementById('report-entity').selectedIndex].text;
+    
+    if (!r) return;
+
+    // Duplicate check
+    let history = JSON.parse(localStorage.getItem('reportHistory_' + GAME_DATA.activeSeed) || "[]");
+    if (history.includes(r + "_" + g)) {
+        return showCustomAlert("You have already filed this report!");
+    }
+
+    let isDev = localStorage.getItem('isDevMode') === 'true';
+    let cRound = GAME_DATA.round || 1;
+    let isFree = (cRound % 2 !== 0) || isDev;
+    let apCost = isFree ? 0 : 3;
+
+    let costHtml = isFree 
+        ? `<span style="color:#4ade80;">(Free Action)</span>`
+        : `Calling an Emergency Courier will cost <strong style="color:var(--gold);">3 AP ⚡</strong>.`;
+    
+    promptActionConfirm(`File warrant for <strong>${r}</strong>?<br><br>${costHtml}`, () => {
+        // Only spend AP if it's not free
+        if (!isFree && !spendAP(apCost)) return; 
+
+        history.push(r + "_" + g);
+        localStorage.setItem('reportHistory_' + GAME_DATA.activeSeed, JSON.stringify(history));
+
+        let reports = JSON.parse(localStorage.getItem('pendingReports_' + GAME_DATA.activeSeed) || "[]");
+        reports.push({ room: r, guess: g, guessName: gName, verificationTime: GAME_DATA.timeSpent + 60 });
+        localStorage.setItem('pendingReports_' + GAME_DATA.activeSeed, JSON.stringify(reports));
+        
+        updateStatsUI(); 
+        document.getElementById('field-report-modal').style.display = 'none';
+        showCustomAlert(`Report submitted! The lab will process it next round.`);
+    });
 }
 
 
@@ -2629,7 +2732,6 @@ function checkLocationAbilities() {
 
 
 
-
 function openSpecialActionModal() {
     let type = document.getElementById('special-action-btn').dataset.actionType;
     let title = document.getElementById('special-action-title');
@@ -3286,18 +3388,24 @@ function openWarrantModal() {
 
     let cRound = GAME_DATA.round || 1;
     
-    // HARD LOCK: Enforces the 2-Round Court limit
-    if (!isDev && !(cRound > 1 && cRound % 2 !== 0)) {
-        let nextRound = (cRound % 2 === 0) ? cRound + 1 : cRound + 2;
-        return showCustomAlert(`<span style='color:#ff6b6b; font-weight:bold;'>COURTS CLOSED</span><br><br>The Judge only reviews warrants after 2 full hours of investigation have passed.<br><br>Please wait for Round ${nextRound}.`);
+    // ONLY block on Round 1
+    if (!isDev && cRound === 1) {
+        return showCustomAlert(`<span style='color:#ff6b6b; font-weight:bold;'>COURTS CLOSED</span><br><br>The precinct doesn't accept reports in the very first hour of an investigation.<br><br>Please wait until Round 2.`);
+    }
+
+    // Logic: Free on Odd (1, 3, 5...), Costs 3 AP on Even (2, 4, 6...)
+    let isFree = (cRound % 2 !== 0) || isDev;
+    let modalDesc = document.querySelectorAll('#field-report-modal p')[1];
+    
+    if (modalDesc) {
+        modalDesc.innerHTML = `File a formal department report for a specific room. The lab processes it in 1 Hour.<br>` + 
+        (isFree ? `<span style="color:#4ade80; font-weight:bold;">(Free Action - Standard Courier)</span>` 
+                : `<span style="color:var(--gold); font-weight:bold;">(Cost: 3 AP ⚡ - Emergency Courier)</span>`);
     }
 
     populateQueryDropdowns();
     document.getElementById('field-report-modal').style.display = 'flex';
 }
-
-
-
 
 
 function executeFieldReport() {
@@ -3308,27 +3416,48 @@ function executeFieldReport() {
     let gName = document.getElementById('report-entity').options[document.getElementById('report-entity').selectedIndex].text;
     
     if (!r) return;
+
+    // 🚨 ANTI-DUPLICATE CHECK: Prevent identical reports
+    let history = JSON.parse(localStorage.getItem('reportHistory_' + GAME_DATA.activeSeed) || "[]");
+    let comboKey = r + "_" + g; // e.g., "DINING ROOM_K"
+    if (history.includes(comboKey)) {
+        return showCustomAlert(`<span style='color:#ff6b6b; font-weight:bold; font-size:1.2rem; text-transform:uppercase;'>DUPLICATE REPORT</span><br><br>You have already filed a report guessing that <strong>${gName}</strong> is in the <strong>${r}</strong>.<br><br>The lab will not process the exact same request twice.`);
+    }
+
+    let isDev = localStorage.getItem('isDevMode') === 'true';
+    let cRound = GAME_DATA.round || 1;
+    let isFree = (cRound % 2 !== 0) || isDev;
+    let apCost = isFree ? 0 : 3;
+
+    // Set up the confirmation text dynamically
+    let costHtml = isFree 
+        ? `<span style="color:#4ade80;">(This is a Free Action - Courier Available)</span>`
+        : `Calling an Emergency Courier will cost <strong style="color:var(--gold);">3 AP ⚡</strong>.<br><br><span style="font-size:0.9rem; color:#bbb;">* Move your AP Tracker +3 on your physical Officer Stats sheet.</span>`;
     
-    promptActionConfirm(`Are you sure you want to file a Search Warrant for the <strong>${r}</strong>?<br><br><span style="color:#4ade80;">(This is a Free Action)</span>`, () => {
+    promptActionConfirm(`Are you sure you want to file a Search Warrant for the <strong>${r}</strong>?<br><br>${costHtml}`, () => {
         
-                let reports = JSON.parse(localStorage.getItem('pendingReports_' + GAME_DATA.activeSeed) || "[]");
-        // TIME CHANGED TO 60 (1 Round)
+        // Deduct AP if it is an Emergency Courier!
+        if (!isFree && !spendAP(apCost)) return; 
+
+        // 🚨 ADD TO HISTORY SO THEY CAN'T SUBMIT IT AGAIN
+        history.push(comboKey);
+        localStorage.setItem('reportHistory_' + GAME_DATA.activeSeed, JSON.stringify(history));
+
+        let reports = JSON.parse(localStorage.getItem('pendingReports_' + GAME_DATA.activeSeed) || "[]");
         reports.push({ room: r, guess: g, guessName: gName, verificationTime: GAME_DATA.timeSpent + 60 });
         localStorage.setItem('pendingReports_' + GAME_DATA.activeSeed, JSON.stringify(reports));
         
-        updateStatsUI(); // <--- INSTANTLY LOCKS THE BUTTON!
+        updateStatsUI(); 
         
-        saveLog(`Filed Warrant: Suspect ${gName} in ${r}`);
+        let costLog = isFree ? "(Free)" : "(-3 AP)";
+        saveLog(`Filed Warrant: Suspect ${gName} in ${r} ${costLog}`);
         document.getElementById('field-report-modal').style.display = 'none';
         
-                showCustomAlert(`<span style='color:var(--gold); font-weight:bold;'>REPORT SUBMITTED</span><br><br>You filed a formal Search Report for the <strong>${r}</strong>. The lab will process it next round.<br><br><span style='font-size:0.85rem; color:#bbb;'>You may file another report if you have any left!</span>`, () => {
-            // We DO NOT call completePhase('LOG') here so the player can file a 2nd report!
+        showCustomAlert(`<span style='color:var(--gold); font-weight:bold;'>REPORT SUBMITTED</span><br><br>You filed a formal Search Report for the <strong>${r}</strong>. The lab will process it next round.<br><br><span style='font-size:0.85rem; color:#bbb;'>You may file another report if you have any left!</span>`, () => {
             if (typeof checkPhaseTransition === 'function') checkPhaseTransition();
         });
     }, "File Report", "Cancel");
 }
-
-
 
 
 function openBribeModal() {
@@ -4076,11 +4205,10 @@ function checkPendingReports() {
     let reports = JSON.parse(localStorage.getItem('pendingReports_' + GAME_DATA.activeSeed) || "[]");
     if (reports.length === 0) return;
 
-        let stillPending = [];
+    let stillPending = [];
     let verifiedMessages = [];
     let firstWarrants = JSON.parse(localStorage.getItem('firstWarrants_' + GAME_DATA.activeSeed) || "{}");
     
-    // Load all Player & AI Stats
     let playerScore = parseInt(localStorage.getItem('playerScore_' + GAME_DATA.activeSeed) || 0);
     let playerRank = parseInt(localStorage.getItem('playerRank_' + GAME_DATA.activeSeed) || 1); 
     let playerRep = parseInt(localStorage.getItem('playerRep_' + GAME_DATA.activeSeed) || 0);
@@ -4093,102 +4221,72 @@ function checkPendingReports() {
             if(actualType === 'I' && actualEnt.name !== 'Nobody') actualType = 'I_Innocent';
             if(actualType === 'I' && actualEnt.name === 'Nobody') actualType = 'I_Empty';
 
-            // Correctly evaluate if the player guessed right!
-            let isCorrect = (rep.guess === actualType) || (rep.guess === 'K' && actualType === 'K');
+                        let isCorrect = (rep.guess === actualType) || (rep.guess === 'K' && actualType === 'K');
 
-                        if (isCorrect) {
-                let isTossed = localStorage.getItem('tossedRoom_' + GAME_DATA.activeSeed + '_' + rep.room);
+            if (isCorrect) {
                 let pts = 0;
+                let tokenReward = 0;
+                let repReward = 0;
+                let rankReward = 0;
                 let rankTxt = "";
-                
-                let tokenReward = 100; // ALWAYS rewards cash!
-                let rankReward = isTossed ? 0 : 1; 
-                let repReward = 0; 
 
-                
-                let isKillerGuess = (rep.guess === 'K');
-                let pts1st = isKillerGuess ? 300 : 100;
-                let pts2nd = isKillerGuess ? 150 : 50;
-                
-                if (tokenReward > 0) {
-                    GAME_DATA.tokens = (GAME_DATA.tokens || 0) + tokenReward;
-                    let tokenTextEl = document.getElementById('token-count');
-                    if (tokenTextEl) tokenTextEl.innerText = GAME_DATA.tokens;
+                if (rep.guess === 'K') { 
+                    pts = 300; tokenReward = 100; repReward = 2; rankReward = 1; rankTxt = "Killer Located";
+                } else if (rep.guess === 'W1') { 
+                    pts = 100; tokenReward = 100; repReward = 1; rankReward = 1; rankTxt = "Weapon Found";
+                } else { 
+                    pts = 50; tokenReward = 50; repReward = 1; rankReward = 1; rankTxt = "Area Secured";
                 }
-                
-                if (rankReward > 0) playerRank += rankReward;
-                
-                                // 1ST PLACE LOGIC: Rewards +2 Reputation to Player!
-                if (!firstWarrants[rep.room]) {
-                    firstWarrants[rep.room] = 'Player';
-                    pts = pts1st; 
-                    rankTxt = "1st Place";
-                    repReward = 2;
-                    
-                    // DAMAGE ALFRED'S REPUTATION
-                    aiStats.rep = (aiStats.rep || 0) - 1;
-                    let aiRanksLost = 0;
-                    while (aiStats.rep <= -3) {
-                        aiStats.rep += 3;
-                        aiStats.rank -= 1;
-                        aiRanksLost++;
-                    }
-                    if (aiRanksLost > 0) rankTxt += ` (Alfred lost ${aiRanksLost} Rank!)`;
-                    else rankTxt += ` (Alfred lost 1 Rep!)`;
-                    
-                } else if (firstWarrants[rep.room] === 'AI') {
 
-                    pts = pts2nd; 
-                    rankTxt = "2nd Place";
-                }
+                // Apply rewards and FORCE token save to memory!
+                GAME_DATA.tokens = parseInt(localStorage.getItem('tokens_' + GAME_DATA.activeSeed) || 0) + tokenReward;
+                localStorage.setItem('tokens_' + GAME_DATA.activeSeed, GAME_DATA.tokens);
                 
                 playerScore += pts;
                 playerRep += repReward;
+                playerRank += rankReward;
 
-                // Build dynamic reward text safely!
-                let rewardStr = `+${pts} Pts`;
-                if (tokenReward > 0) rewardStr += `, +$${tokenReward}`;
-                if (rankReward > 0) rewardStr += `, +${rankReward} Rank`;
-                if (repReward > 0) rewardStr += `, +${repReward} Rep`;
-                if (isTossed) rewardStr += `<br><span style='color:#f43f5e;'>No Rank Bonus (Room was previously tossed)</span>`;
-
-                if (rep.guess === 'K') {
-                    verifiedMessages.push(`Warrant on <strong>${rep.room}</strong>: <span style="color:#4ade80; font-weight:bold;">GRANTED</span><br><span style="font-size:0.85rem; color:#ccc;">Evidence confirms the Killer's path moved through this location! (${rewardStr})</span>`);
-                } else {
-                    verifiedMessages.push(`Warrant on <strong>${rep.room}</strong>: <span style="color:#4ade80; font-weight:bold;">CORRECT (${rankTxt})</span><br><span style="font-size:0.85rem; color:#ccc;">(${rewardStr})</span>`);
-                }
-                saveLog(`Lab Result: Warrant for ${rep.room} - CORRECT`);
+                let rewardStr = `+${pts} Pts, +$${tokenReward}, +${repReward} Rep, +${rankReward} Rank`;
+                verifiedMessages.push(`Warrant on <strong>${rep.room}</strong>: <span style="color:#4ade80; font-weight:bold;">CONFIRMED</span><br><span style="font-size:0.85rem; color:#ccc;">${rankTxt}. (${rewardStr})</span>`);
+                saveLog(`Lab Result: Warrant for ${rep.room} - CONFIRMED`);
             } else {
-                verifiedMessages.push(`Warrant on <strong>${rep.room}</strong>: <span style="color:#ff6b6b; font-weight:bold;">REJECTED</span><br><span style="font-size:0.85rem; color:#ccc;">Judge denied request. Trail is completely cold here.</span>`);
-                saveLog(`Lab Result: Warrant for ${rep.room} - REJECTED`);
+
+                // Incorrect guess penalty
+                playerScore -= 50;
+                verifiedMessages.push(`Report on <strong>${rep.room}</strong>: <span style="color:#ff6b6b; font-weight:bold;">REJECTED</span><br><span style="font-size:0.85rem; color:#ccc;">Incorrect identification. (-50 Pts)</span>`);
+                saveLog(`Lab Result: Report for ${rep.room} - REJECTED`);
             }
         } else {
             stillPending.push(rep); 
         }
     });
 
-        localStorage.setItem('firstWarrants_' + GAME_DATA.activeSeed, JSON.stringify(firstWarrants));
+    // Save all state
     localStorage.setItem('playerScore_' + GAME_DATA.activeSeed, playerScore);
     localStorage.setItem('playerRank_' + GAME_DATA.activeSeed, playerRank); 
     localStorage.setItem('playerRep_' + GAME_DATA.activeSeed, playerRep); 
     localStorage.setItem('pendingReports_' + GAME_DATA.activeSeed, JSON.stringify(stillPending));
     localStorage.setItem('tokens_' + GAME_DATA.activeSeed, GAME_DATA.tokens);
-    localStorage.setItem('aiStats_' + GAME_DATA.activeSeed, JSON.stringify(aiStats));
+    updateStatsUI();
 
-    if (verifiedMessages.length > 0) {
-
+        if (verifiedMessages.length > 0) {
         let labAlert = document.getElementById('lab-alert');
+        
+        // Safely creates the alert box if it doesn't exist!
         if (!labAlert) {
             labAlert = document.createElement('div');
             labAlert.id = 'lab-alert';
             labAlert.style.cssText = "position:fixed; top:20px; left:50%; transform:translateX(-50%); background:var(--paper); color:var(--ink); padding:15px; border-radius:8px; z-index:9999; text-align:center; box-shadow:0 4px 15px rgba(0,0,0,0.5); border: 3px solid var(--accent); font-family:'Crimson Text'; font-size:1.1rem; width: 90%; max-width: 350px;";
             document.body.appendChild(labAlert);
         }
-        labAlert.innerHTML = `<strong style="color:var(--accent); text-transform:uppercase;">Lab Results Returned</strong><hr style="border:1px solid #ddd; margin:10px 0;"><div style="line-height:1.6;">${verifiedMessages.join('<br><br>')}</div><button class="btn btn-crimson" onclick="this.parentElement.style.display='none'" style="margin-top:15px; padding:8px; font-size:0.9rem;">Dismiss</button>`;
+        
+        labAlert.innerHTML = `<strong style="color:var(--accent); text-transform:uppercase;">Lab Results Returned</strong><hr style="border:1px solid #ddd; margin:10px 0;"><div style="line-height:1.6;">${verifiedMessages.join('<br><br>')}</div><br><span style="font-size:0.85rem; color:#bbb;">* Update your Rank, Reputation, and Tokens on your physical Officer Stats sheet!</span><button class="btn btn-crimson" onclick="this.parentElement.style.display='none'" style="margin-top:15px; width:100%; padding:8px; font-size:0.9rem;">Dismiss</button>`;
         labAlert.style.display = 'block';
-        playDing();
+        if (typeof playDing === 'function') playDing();
     }
 }
+
+
 
 function toggleDifficulty() {
     const mode = document.getElementById('new-game-mode').value;
